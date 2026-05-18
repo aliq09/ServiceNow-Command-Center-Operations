@@ -1,5 +1,6 @@
 import express from "express";
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import multer from "multer";
 import OpenAI from "openai";
@@ -12,13 +13,19 @@ const port = process.env.PORT || 8790;
 const imageModel = "gpt-image-2";
 const measurementModel = process.env.OPENAI_MEASUREMENT_MODEL || "gpt-5.2";
 const xaiMeasurementModel = process.env.XAI_MEASUREMENT_MODEL || "grok-4.20-0309-reasoning";
-const xaiImageModel = process.env.XAI_IMAGE_MODEL || "grok-imagine-image-pro";
+const xaiImageModel = process.env.XAI_IMAGE_MODEL || "grok-imagine-image";
 const xaiVideoModel = process.env.XAI_VIDEO_MODEL || "grok-imagine-video";
+const xaiAgentModel = process.env.XAI_AGENT_MODEL || "grok-4.20-0309-non-reasoning";
 const orchestrationModel = process.env.OPENAI_ORCHESTRATION_MODEL || "gpt-5.2";
 const minimalStylingMaxAttempts = 2;
-const minimalStylingCostEstimate = 0.07;
+const minimalStylingCostEstimate = 0.02;
+const MONTHLY_BUDGET_USD = Number(process.env.MONTHLY_BUDGET_USD || 5);
+const CURRENT_MONTH = new Date().toISOString().slice(0, 7);
+const MEASUREMENT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const measurementCache = new Map();
 const XAI_PRICING = {
   "grok-4.20-0309-reasoning": { input: 0.00125, output: 0.0025 },
+  "grok-4.20-0309-non-reasoning": { input: 0.00125, output: 0.0025 },
   "grok-4.20-multi-agent-0309": { input: 0.00125, output: 0.0025 },
   "grok-imagine-image-pro": { per_image: 0.07 },
   "grok-imagine-image": { per_image: 0.02 },
@@ -92,18 +99,25 @@ Output schema:
 
 const GROK_USER_PROMPT = "Please measure this model as accurately as possible for fashion fit review. Prioritize visible body contours, posture, camera perspective, and garment fit. Return centimeters and per-field confidence from 0 to 100.";
 
-app.get("/api/health", (_req, res) => {
-  res.json({
-    ok: true,
-    hasApiKey: Boolean(process.env.OPENAI_API_KEY),
-    hasXaiKey: Boolean(process.env.XAI_API_KEY),
-    imageModel,
-    measurementModel,
-    xaiMeasurementModel,
-    xaiImageModel,
-    xaiVideoModel,
-    cwd: process.cwd()
-  });
+app.get("/api/health", async (_req, res) => {
+  try {
+    res.json({
+      ok: true,
+      hasApiKey: Boolean(process.env.OPENAI_API_KEY),
+      hasXaiKey: Boolean(process.env.XAI_API_KEY),
+      imageModel,
+      measurementModel,
+      xaiMeasurementModel,
+      xaiImageModel,
+      xaiVideoModel,
+      xaiAgentModel,
+      monthlyBudgetUsd: MONTHLY_BUDGET_USD,
+      budget: await getBudgetStatus("image", xaiImageModel),
+      cwd: process.cwd()
+    });
+  } catch (error) {
+    res.status(500).json({ ok: false, error: error.message || "Health check failed." });
+  }
 });
 
 app.get("/api/history/:id", (req, res) => {
@@ -172,7 +186,7 @@ app.post("/api/assistant/route", upload.single("reference"), async (req, res) =>
     assistantHistory.set(id, record);
     res.json(record);
   } catch (error) {
-    res.status(500).json({ error: error.message || "Assistant orchestration failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Assistant orchestration failed." });
   }
 });
 
@@ -234,11 +248,27 @@ app.post("/api/measure-image", upload.single("reference"), async (req, res) => {
       return;
     }
 
+    const resolvedModel = model || xaiMeasurementModel;
+    const cacheKey = imageCacheKey("xai", resolvedModel, req.file);
+    const cached = getCachedMeasurement(cacheKey);
+    if (cached) {
+      res.json({
+        ...cached,
+        cached: true,
+        costUsd: 0,
+        costPreviewUsd: 0,
+        budget: await getBudgetStatus("measurement", resolvedModel),
+        message: "Measurement returned from the 24-hour cache. No paid Grok call was made."
+      });
+      return;
+    }
+
     const imageBase64 = req.file.buffer.toString("base64");
 
     try {
+      const budgetGuard = await enforceMonthlyBudget("measurement", resolvedModel);
       const response = await xai.chat.completions.create({
-        model: model || xaiMeasurementModel,
+        model: resolvedModel,
         messages: [
           { role: "system", content: GROK_MEASUREMENT_SYSTEM_PROMPT },
           {
@@ -255,27 +285,31 @@ app.post("/api/measure-image", upload.single("reference"), async (req, res) => {
 
       const raw = parseJsonObject(response.choices?.[0]?.message?.content || "");
       const measurement = normalizeGrokMeasurementResult(raw);
-      const usage = buildMeasurementUsageReport(response.usage, "xai", model || xaiMeasurementModel);
+      const usage = buildMeasurementUsageReport(response.usage, "xai", resolvedModel);
       await appendUsageEvent({
         type: "measurement",
         provider: "xai",
-        model: model || xaiMeasurementModel,
+        model: resolvedModel,
         status: "completed",
         costUsd: usage.costUsd,
         estimatedCostUsd: usage.costUsd,
         providerResponse: "Grok measurement completed."
       });
-      res.json({
+      const result = {
         status: "completed",
         provider: "xai",
-        model: model || xaiMeasurementModel,
+        model: resolvedModel,
         measurement,
         recommendations: getClothingSizeRecommendations(measurement),
         costUsd: usage.costUsd,
+        costPreviewUsd: budgetGuard.estimatedCostUsd,
+        budget: await getBudgetStatus("measurement", resolvedModel),
         usage
-      });
+      };
+      setCachedMeasurement(cacheKey, result);
+      res.json(result);
     } catch (error) {
-      res.status(500).json({ error: error.message || "Grok measurement estimation failed." });
+      res.status(statusForError(error)).json({ error: error.message || "Grok measurement estimation failed." });
     }
     return;
   }
@@ -292,6 +326,7 @@ app.post("/api/measure-image", upload.single("reference"), async (req, res) => {
   const imageUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
 
   try {
+    const budgetGuard = await enforceMonthlyBudget("measurement", model || measurementModel);
     const response = await openai.responses.create({
       model: model || measurementModel,
       input: [
@@ -323,10 +358,12 @@ app.post("/api/measure-image", upload.single("reference"), async (req, res) => {
       provider: "openai",
       model: model || measurementModel,
       measurement,
+      costPreviewUsd: budgetGuard.estimatedCostUsd,
+      budget: await getBudgetStatus("measurement", model || measurementModel),
       usage: buildMeasurementUsageReport(response.usage, "openai", model || measurementModel)
     });
   } catch (error) {
-    res.status(500).json({ error: error.message || "Measurement estimation failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Measurement estimation failed." });
   }
 });
 
@@ -531,6 +568,71 @@ function calculateAccurateCost(provider, model, usage = {}, type = "") {
   const inputCost = (inputTokens / 1_000_000) * (pricing.input || 0);
   const outputCost = (outputTokens / 1_000_000) * (pricing.output || 0);
   return Number((inputCost + outputCost).toFixed(6));
+}
+
+function estimateActionCost(type = "image", model = "") {
+  const normalized = String(type || "").toLowerCase();
+  if (normalized.includes("video")) return XAI_PRICING[xaiVideoModel]?.per_video || 0.25;
+  if (normalized.includes("edit") || normalized.includes("image")) {
+    const resolvedModel = model || xaiImageModel;
+    return XAI_PRICING[resolvedModel]?.per_image || XAI_PRICING[xaiImageModel]?.per_image || 0.02;
+  }
+  if (normalized.includes("measurement") || normalized.includes("analyze")) return XAI_PRICING.measurement.fixed;
+  if (normalized.includes("agent")) return 0.0035;
+  return 0.02;
+}
+
+async function getBudgetSpendThisMonth() {
+  const manifest = await buildRecentAssetIndex();
+  const totals = buildBillingTotals(manifest);
+  return Number(totals.totalSpend || 0);
+}
+
+async function getBudgetStatus(type = "image", model = "") {
+  const spent = await getBudgetSpendThisMonth();
+  const estimated = estimateActionCost(type, model);
+  const remaining = Math.max(0, MONTHLY_BUDGET_USD - spent);
+  return {
+    month: CURRENT_MONTH,
+    monthlyBudgetUsd: MONTHLY_BUDGET_USD,
+    spentThisMonthUsd: Number(spent.toFixed(6)),
+    remainingUsd: Number(remaining.toFixed(6)),
+    percentUsed: MONTHLY_BUDGET_USD > 0 ? Math.min(100, Number(((spent / MONTHLY_BUDGET_USD) * 100).toFixed(2))) : 100,
+    estimatedActionCostUsd: Number(estimated.toFixed(6)),
+    canRunAction: spent + estimated <= MONTHLY_BUDGET_USD,
+    videoDisabled: spent + estimateActionCost("video", xaiVideoModel) > MONTHLY_BUDGET_USD,
+    warning: remaining <= 0.5
+  };
+}
+
+async function enforceMonthlyBudget(type = "image", model = "") {
+  const status = await getBudgetStatus(type, model);
+  if (!status.canRunAction) {
+    throw new Error(`Monthly budget of $${MONTHLY_BUDGET_USD.toFixed(2)} reached. Current spend: $${status.spentThisMonthUsd.toFixed(2)}. Action blocked.`);
+  }
+  return {
+    estimatedCostUsd: status.estimatedActionCostUsd,
+    budget: status
+  };
+}
+
+function imageCacheKey(provider, model, file) {
+  const hash = createHash("sha256").update(file.buffer).digest("hex");
+  return `${provider}:${model}:${hash}`;
+}
+
+function getCachedMeasurement(key) {
+  const cached = measurementCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.createdAt > MEASUREMENT_CACHE_TTL_MS) {
+    measurementCache.delete(key);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedMeasurement(key, value) {
+  measurementCache.set(key, { createdAt: Date.now(), value });
 }
 
 async function fetchOpenAIOfficialBilling({ days = 30 } = {}) {
@@ -740,10 +842,24 @@ async function executeAssistantPlan(plan, options) {
 async function executeMeasurementTool(provider, file, model) {
   const client = provider === "xai" ? getXAI() : getOpenAI();
   if (!client) throw new Error(provider === "xai" ? "Set XAI_API_KEY to use Grok measurement." : "Set OPENAI_API_KEY to use OpenAI measurement.");
+  const resolvedModel = model || (provider === "xai" ? xaiMeasurementModel : measurementModel);
+  const cacheKey = imageCacheKey(provider, resolvedModel, file);
+  const cached = getCachedMeasurement(cacheKey);
+  if (cached) {
+    return {
+      ...cached,
+      cached: true,
+      costUsd: 0,
+      costPreviewUsd: 0,
+      budget: await getBudgetStatus("measurement", resolvedModel),
+      message: "Measurement returned from the 24-hour cache. No paid model call was made."
+    };
+  }
+  const budgetGuard = await enforceMonthlyBudget("measurement", resolvedModel);
   if (provider === "xai") {
     const imageBase64 = file.buffer.toString("base64");
     const response = await client.chat.completions.create({
-      model: model || xaiMeasurementModel,
+      model: resolvedModel,
       messages: [
         { role: "system", content: GROK_MEASUREMENT_SYSTEM_PROMPT },
         {
@@ -758,30 +874,34 @@ async function executeMeasurementTool(provider, file, model) {
       max_tokens: 800
     });
     const measurement = normalizeGrokMeasurementResult(parseJsonObject(response.choices?.[0]?.message?.content || ""));
-    const usage = buildMeasurementUsageReport(response.usage, provider, model || xaiMeasurementModel);
+    const usage = buildMeasurementUsageReport(response.usage, provider, resolvedModel);
     await appendUsageEvent({
       type: "measurement",
       provider,
-      model: model || xaiMeasurementModel,
+      model: resolvedModel,
       status: "completed",
       costUsd: usage.costUsd,
       estimatedCostUsd: usage.costUsd,
       providerResponse: "Grok measurement completed."
     });
-    return {
+    const result = {
       status: "completed",
       provider,
-      model: model || xaiMeasurementModel,
+      model: resolvedModel,
       measurement,
       recommendations: getClothingSizeRecommendations(measurement),
       costUsd: usage.costUsd,
+      costPreviewUsd: budgetGuard.estimatedCostUsd,
+      budget: await getBudgetStatus("measurement", resolvedModel),
       usage,
       saved: []
     };
+    setCachedMeasurement(cacheKey, result);
+    return result;
   }
   const imageUrl = `data:${file.mimetype};base64,${file.buffer.toString("base64")}`;
   const response = await client.responses.create({
-    model: model || (provider === "xai" ? xaiMeasurementModel : measurementModel),
+    model: resolvedModel,
     input: [{
       role: "user",
       content: [
@@ -790,27 +910,32 @@ async function executeMeasurementTool(provider, file, model) {
       ]
     }]
   });
-  return {
+  const result = {
     status: "completed",
     provider,
-    model: model || (provider === "xai" ? xaiMeasurementModel : measurementModel),
+    model: resolvedModel,
     measurement: parseMeasurementJson(extractOutputText(response)),
-    usage: buildMeasurementUsageReport(response.usage, provider, model || measurementModel),
+    costPreviewUsd: budgetGuard.estimatedCostUsd,
+    budget: await getBudgetStatus("measurement", resolvedModel),
+    usage: buildMeasurementUsageReport(response.usage, provider, resolvedModel),
     saved: []
   };
+  setCachedMeasurement(cacheKey, result);
+  return result;
 }
 
 async function executeImageGenerationTool(provider, prompt, { model, quality = "auto", size = "auto" }) {
+  const resolvedModel = model || (provider === "xai" ? xaiImageModel : imageModel);
+  const budgetGuard = await enforceMonthlyBudget("image", resolvedModel);
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to generate images with Grok/xAI.");
     const response = await fetch("https://api.x.ai/v1/images/generations", {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ model: model || xaiImageModel, prompt, n: 1, aspect_ratio: mapSizeToAspectRatio(size), resolution: quality === "high" ? "2k" : "1k" })
+      body: JSON.stringify({ model: resolvedModel, prompt, n: 1, aspect_ratio: mapSizeToAspectRatio(size), resolution: quality === "high" ? "2k" : "1k" })
     });
     const image = await response.json();
     if (!response.ok) throw new Error(image.error?.message || "xAI image generation failed.");
-    const resolvedModel = model || xaiImageModel;
     const outputCount = Array.isArray(image.data) ? image.data.length || 1 : 1;
     const costUsd = Number((calculateAccurateCost("xai", resolvedModel, image.usage || {}, "image_generation") * outputCount).toFixed(6));
     const saved = attachCostToSaved(
@@ -818,19 +943,20 @@ async function executeImageGenerationTool(provider, prompt, { model, quality = "
       costUsd,
       { provider: "xai", model: resolvedModel, status: "completed", jobType: "image_generation" }
     );
-    return { status: "completed", provider: "xai", model: resolvedModel, saved, image, costUsd, usage: { provider: "xai", model: resolvedModel, costUsd, pricingSource: "local_xai_pricing_map" } };
+    return { status: "completed", provider: "xai", model: resolvedModel, saved, image, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("image", resolvedModel), usage: { provider: "xai", model: resolvedModel, costUsd, pricingSource: "local_xai_pricing_map" } };
   }
 
   const openai = getOpenAI();
   if (!openai) throw new Error("Set OPENAI_API_KEY to generate images with OpenAI.");
-  const resolvedModel = model || imageModel;
   const image = await openai.images.generate({ model: resolvedModel, prompt, quality, size, n: 1 });
   return {
     status: "completed",
     provider: "openai",
     model: resolvedModel,
     saved: await saveMediaOutputs(image, "images", "openai-generated", { provider: "openai", model: resolvedModel, status: "completed", jobType: "image_generation" }),
-    image
+    image,
+    costPreviewUsd: budgetGuard.estimatedCostUsd,
+    budget: await getBudgetStatus("image", resolvedModel)
   };
 }
 
@@ -838,6 +964,7 @@ async function executeXaiImageEditTool(file, prompt, { model = xaiImageModel, qu
   validateImageUpload(file);
   validatePrompt(prompt, "Edit prompt");
   if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to edit images with Grok Imagine.");
+  const budgetGuard = await enforceMonthlyBudget("image_edit", model);
   const response = await fetch("https://api.x.ai/v1/images/edits", {
     method: "POST",
     headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}`, "Content-Type": "application/json" },
@@ -859,11 +986,12 @@ async function executeXaiImageEditTool(file, prompt, { model = xaiImageModel, qu
     costUsd,
     { provider: "xai", model, status: "completed", jobType: "image_edit" }
   );
-  return { status: "completed", provider: "xai", model, saved, edit, costUsd, usage: { provider: "xai", model, costUsd, pricingSource: "local_xai_pricing_map" } };
+  return { status: "completed", provider: "xai", model, saved, edit, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("image_edit", model), usage: { provider: "xai", model, costUsd, pricingSource: "local_xai_pricing_map" } };
 }
 
 async function executeVideoTool(provider, prompt, { file, model, size = "1280x720", seconds = "8" }) {
   const resolvedModel = model || (provider === "xai" ? xaiVideoModel : "sora-2");
+  const budgetGuard = await enforceMonthlyBudget("video", resolvedModel);
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to start Grok/xAI video jobs.");
     const body = { model: resolvedModel, prompt, duration: Math.min(15, Math.max(1, Number(seconds) || 8)), aspect_ratio: mapSizeToAspectRatio(size), resolution: "720p" };
@@ -885,14 +1013,14 @@ async function executeVideoTool(provider, prompt, { file, model, size = "1280x72
     if (!saved.length) {
       await appendUsageEvent({ type: "video_generation", provider: "xai", model: resolvedModel, status, costUsd, estimatedCostUsd: costUsd, providerResponse: "Grok video request accepted; final media URL not returned yet." });
     }
-    return { status, provider: "xai", model: resolvedModel, saved, video, costUsd, usage: { provider: "xai", model: resolvedModel, costUsd, pricingSource: "local_xai_pricing_map" } };
+    return { status, provider: "xai", model: resolvedModel, saved, video, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "xai", model: resolvedModel, costUsd, pricingSource: "local_xai_pricing_map" } };
   }
 
   const openai = getOpenAI();
   if (!openai) throw new Error("Set OPENAI_API_KEY to start Sora video jobs.");
   const video = await openai.videos.create({ model: resolvedModel, prompt, size, seconds });
   const saved = await saveMediaOutputs(video, "videos", "openai-video");
-  return { status: saved.length ? "completed" : "queued", provider: "openai", model: resolvedModel, saved, video };
+  return { status: saved.length ? "completed" : "queued", provider: "openai", model: resolvedModel, saved, video, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel) };
 }
 
 function parseJsonObject(text) {
@@ -919,6 +1047,10 @@ function validateImageUpload(file) {
   if (!file) throw new Error("A reference image is required.");
   if (!file.mimetype?.startsWith("image/")) throw new Error("The reference file must be an image.");
   if (file.size > 25 * 1024 * 1024) throw new Error("The reference image must be under 25 MB.");
+}
+
+function statusForError(error, fallback = 500) {
+  return /Monthly budget/i.test(error?.message || "") ? 402 : fallback;
 }
 
 function cryptoRandomId(prefix) {
@@ -979,7 +1111,7 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
     try {
       res.json(await executeImageGenerationTool("xai", prompt, { model, quality, size }));
     } catch (error) {
-      res.status(500).json({ error: error.message || "xAI image generation failed." });
+      res.status(statusForError(error)).json({ error: error.message || "xAI image generation failed." });
     }
     return;
   }
@@ -994,18 +1126,9 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
   }
 
   try {
-    const image = await openai.images.generate({
-      model: model || imageModel,
-      prompt,
-      quality,
-      size,
-      n: 1
-    });
-
-    const saved = await saveMediaOutputs(image, "images", "openai-generated", { provider: "openai", model: model || imageModel, status: "completed", jobType: "image_generation" });
-    res.json({ status: "completed", provider: "openai", model: model || imageModel, image, saved });
+    res.json(await executeImageGenerationTool("openai", prompt, { model, quality, size }));
   } catch (error) {
-    res.status(500).json({ error: error.message || "Image generation failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Image generation failed." });
   }
 });
 
@@ -1038,7 +1161,7 @@ app.post("/api/edit-image", upload.single("reference"), async (req, res) => {
 });
 
 app.post("/api/grok-agent-chat", upload.single("reference"), async (req, res) => {
-  const { message, context = "", model = xaiMeasurementModel } = req.body || {};
+  const { message, context = "", model = xaiAgentModel } = req.body || {};
 
   if (!message) {
     res.status(400).json({ error: "Message is required." });
@@ -1076,6 +1199,7 @@ app.post("/api/grok-agent-chat", upload.single("reference"), async (req, res) =>
   }
 
   try {
+    const budgetGuard = await enforceMonthlyBudget("agent", model);
     const response = await fetch("https://api.x.ai/v1/responses", {
       method: "POST",
       headers: {
@@ -1116,10 +1240,12 @@ app.post("/api/grok-agent-chat", upload.single("reference"), async (req, res) =>
       model,
       agent,
       costUsd: usage.costUsd,
+      costPreviewUsd: budgetGuard.estimatedCostUsd,
+      budget: await getBudgetStatus("agent", model),
       usage
     });
   } catch (error) {
-    res.status(500).json({ error: error.message || "Grok Agent chat failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Grok Agent chat failed." });
   }
 });
 
@@ -1147,7 +1273,7 @@ app.post("/api/grok-agent-chat", upload.single("reference"), async (req, res) =>
       usage: buildMeasurementUsageReport(response.usage, "xai", model)
     });
   } catch (error) {
-    res.status(500).json({ error: error.message || "Grok Agent chat failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Grok Agent chat failed." });
   }
 });
 */
@@ -1175,7 +1301,7 @@ app.post("/api/generate-video", upload.single("reference"), async (req, res) => 
     try {
       res.json(await executeVideoTool("xai", prompt, { file: req.file, model: resolvedModel, size, seconds }));
     } catch (error) {
-      res.status(500).json({ error: error.message || "xAI video generation failed." });
+      res.status(statusForError(error)).json({ error: error.message || "xAI video generation failed." });
     }
     return;
   }
@@ -1190,17 +1316,9 @@ app.post("/api/generate-video", upload.single("reference"), async (req, res) => 
   }
 
   try {
-    const video = await openai.videos.create({
-      model: resolvedModel,
-      prompt,
-      size,
-      seconds
-    });
-
-    const saved = await saveMediaOutputs(video, "videos", "openai-video");
-    res.json({ status: saved.length ? "completed" : "queued", provider: "openai", model: resolvedModel, video, saved });
+    res.json(await executeVideoTool("openai", prompt, { file: req.file, model: resolvedModel, size, seconds }));
   } catch (error) {
-    res.status(500).json({ error: error.message || "Video generation failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Video generation failed." });
   }
 });
 
@@ -1211,7 +1329,7 @@ app.post("/api/generate/image", upload.array("references", 8), async (req, res) 
     const result = await executeImageGenerationTool(provider, prompt, { model, quality, size });
     res.json(result);
   } catch (error) {
-    res.status(500).json({ error: error.message || "Image generation failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Image generation failed." });
   }
 });
 
@@ -1391,7 +1509,7 @@ app.post("/api/minimal-styling", upload.single("reference"), async (req, res) =>
       estimatedCostUsd: 0
     }));
     await persistMinimalStylingLog(events, { requestId, finalStatus: "failed", startedAt });
-    res.status(500).json({
+    res.status(statusForError(error)).json({
       status: "failed",
       requestId,
       provider,
@@ -1411,7 +1529,7 @@ app.post("/api/generate/video", upload.single("reference"), async (req, res) => 
   try {
     res.json(await executeVideoTool(provider, prompt, { file: req.file, model, size, seconds }));
   } catch (error) {
-    res.status(500).json({ error: error.message || "Video generation failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Video generation failed." });
   }
 });
 
@@ -1421,7 +1539,7 @@ app.post("/api/analyze/image", upload.single("reference"), async (req, res) => {
   try {
     res.json(await executeMeasurementTool(provider, req.file, model));
   } catch (error) {
-    res.status(500).json({ error: error.message || "Image analysis failed." });
+    res.status(statusForError(error)).json({ error: error.message || "Image analysis failed." });
   }
 });
 
@@ -1440,6 +1558,7 @@ app.get("/api/billing/summary", async (_req, res) => {
       uploads: 0,
       storage,
       totals,
+      budget: await getBudgetStatus("image", xaiImageModel),
       openaiOfficial,
       providerSummary: totals.providerSummary,
       modelSummary: totals.modelSummary,
@@ -1475,7 +1594,7 @@ function mapSizeToAspectRatio(size) {
 }
 
 app.use((error, _req, res, _next) => {
-  res.status(500).json({ error: error.message || "Server request failed." });
+  res.status(statusForError(error)).json({ error: error.message || "Server request failed." });
 });
 
 async function saveMediaOutputs(payload, folder, prefix, metadata = {}) {
@@ -1617,7 +1736,7 @@ function hydrateBillingCost(item = {}) {
 function modelForBillingJob(jobType = "") {
   if (jobType.includes("video")) return xaiVideoModel;
   if (jobType.includes("measurement")) return xaiMeasurementModel;
-  if (jobType.includes("agent")) return xaiMeasurementModel;
+  if (jobType.includes("agent")) return xaiAgentModel;
   return xaiImageModel;
 }
 

@@ -75,6 +75,7 @@ const measurementModelOptions = {
   openai: [{ value: "gpt-5.2", label: "GPT-5.2 Vision" }],
   xai: [
     { value: "grok-4.20-0309-reasoning", label: "Grok 4.20 Reasoning" },
+    { value: "grok-4.20-0309-non-reasoning", label: "Grok 4.20 Fast" },
     { value: "grok-4.20-multi-agent-0309", label: "Grok 4.20 Multi-Agent" }
   ]
 };
@@ -82,8 +83,8 @@ const measurementModelOptions = {
 const imageModelOptions = {
   openai: [{ value: "gpt-image-2", label: "GPT-image-2" }],
   xai: [
-    { value: "grok-imagine-image-pro", label: "Grok Image Pro" },
-    { value: "grok-imagine-image", label: "Grok Image" }
+    { value: "grok-imagine-image", label: "Grok Image" },
+    { value: "grok-imagine-image-pro", label: "Grok Image Pro" }
   ]
 };
 
@@ -96,8 +97,8 @@ const videoModelOptions = {
 };
 
 const editModelOptions = [
-  { value: "grok-imagine-image-pro", label: "Grok Image Pro" },
-  { value: "grok-imagine-image", label: "Grok Image" }
+  { value: "grok-imagine-image", label: "Grok Image" },
+  { value: "grok-imagine-image-pro", label: "Grok Image Pro" }
 ];
 
 const workspaceModes = [
@@ -108,6 +109,18 @@ const workspaceModes = [
   { id: "agent", label: "Agent", title: "Grok Agent", cta: "Send message", icon: Wand2 },
   { id: "billing", label: "Billing", title: "Billing Intelligence", cta: "Refresh billing", icon: CreditCard }
 ];
+
+function previewActionCost(type, model = "") {
+  if (type === "video") return 0.25;
+  if (type === "measurement") return 0.0035;
+  if (type === "agent") return 0.0035;
+  if (model === "grok-imagine-image-pro") return 0.07;
+  return 0.02;
+}
+
+function actionCostHint(type, model = "") {
+  return `This action costs ≈ ${formatUsd(previewActionCost(type, model))} before it runs.`;
+}
 
 function App() {
   const [files, setFiles] = useState([]);
@@ -123,7 +136,7 @@ function App() {
   const [videoSize, setVideoSize] = useState("1280x720");
   const [videoProvider, setVideoProvider] = useState("openai");
   const [videoModel, setVideoModel] = useState("sora-2");
-  const [editModel, setEditModel] = useState("grok-imagine-image-pro");
+  const [editModel, setEditModel] = useState("grok-imagine-image");
   const [editQuality, setEditQuality] = useState("high");
   const [shoppingGuide, setShoppingGuide] = useState(null);
   const [fitProfile, setFitProfile] = useState(buildEmptyFitProfile());
@@ -185,6 +198,8 @@ function App() {
   const measurementTimersRef = useRef([]);
   const todayStats = useMemo(() => buildTodayStats(usageLog), [usageLog]);
   const agentCost = useMemo(() => buildAgentCostStats(usageLog), [usageLog]);
+  const budgetStatus = billingSnapshot?.budget || null;
+  const videoBudgetBlocked = Boolean(budgetStatus?.videoDisabled || Number(budgetStatus?.remainingUsd ?? 5) < previewActionCost("video", videoModel));
 
   useEffect(() => {
     try {
@@ -531,7 +546,7 @@ function App() {
 
     const formData = new FormData();
     formData.append("message", message);
-    formData.append("model", measurementModelOptions.xai[0].value);
+    formData.append("model", "grok-4.20-0309-non-reasoning");
     formData.append("context", JSON.stringify({
       activeImage: activeFile?.file.name || null,
       editImage: editFile?.file.name || null,
@@ -592,11 +607,11 @@ function App() {
     }
     if (message.action === "edit_image") {
       setEditPrompt(message.prompt);
-      setEditModel("grok-imagine-image-pro");
+      setEditModel("grok-imagine-image");
       setNotice({ tone: "progress", text: "Agent prompt copied to image edit." });
     } else if (message.action === "generate_image") {
       setImageProvider("xai");
-      setImageModel("grok-imagine-image-pro");
+      setImageModel("grok-imagine-image");
       setImagePrompt(message.prompt);
       setNotice({ tone: "progress", text: "Agent prompt copied to Grok image generation." });
     } else if (message.action === "generate_video") {
@@ -657,13 +672,13 @@ function App() {
       if (source) await appendReferenceToFormData(formData, source);
     } else {
       formData.append("provider", "xai");
-      formData.append("model", "grok-imagine-image-pro");
+      formData.append("model", "grok-imagine-image");
       formData.append("quality", imageQuality);
       formData.append("size", imageSize);
     }
 
     const title = isEdit ? "Agent image edit" : isVideo ? "Agent video generation" : "Agent image generation";
-    setOperation({ type: title, provider: "Grok / xAI", model: isVideo ? "grok-imagine-video" : "grok-imagine-image-pro", status: "running", step: 1, message: "Grok Agent action is running." });
+    setOperation({ type: title, provider: "Grok / xAI", model: isVideo ? "grok-imagine-video" : "grok-imagine-image", status: "running", step: 1, message: "Grok Agent action is running." });
     setProgressOverlay({ type: title, provider: "Grok / xAI", label: isVideo ? "Generating video" : isEdit ? "Editing" : "Generating", progress: isVideo ? 24 : 38, quality: isVideo ? "720p" : "2K", cancellable: isVideo });
 
     try {
@@ -674,7 +689,7 @@ function App() {
         result.saved,
         isVideo ? "video" : "image",
         result.provider || "xai",
-        result.model || (isVideo ? "grok-imagine-video" : "grok-imagine-image-pro"),
+        result.model || (isVideo ? "grok-imagine-video" : "grok-imagine-image"),
         isEdit ? "Agent edited image" : isVideo ? "Agent video" : "Agent generated image"
       );
 
@@ -689,9 +704,9 @@ function App() {
 
       setUsageLog((current) => [
         buildUsageEntry(isVideo ? "Video" : "Image", {
-          model: result.model || (isVideo ? "grok-imagine-video" : "grok-imagine-image-pro"),
+          model: result.model || (isVideo ? "grok-imagine-video" : "grok-imagine-image"),
           provider: "xai",
-          costUsd: result.costUsd || result.usage?.costUsd || (isVideo ? 0.2 : 0.04),
+          costUsd: result.costUsd || result.usage?.costUsd || (isVideo ? 0.25 : 0.02),
           status: result.status
         }),
         ...current
@@ -1107,7 +1122,7 @@ function App() {
         <div className="sidebarFooter">
           <span>Models</span>
           <strong>{measurementProvider === "xai" ? "Grok analysis" : "OpenAI analysis"}</strong>
-          <small>{imageProvider === "xai" ? "Grok Image Pro" : "GPT-image-2"} Â· {videoProvider === "xai" ? "Grok video" : "Sora video"}</small>
+          <small>{imageProvider === "xai" ? "Grok Image" : "GPT-image-2"} Â· {videoProvider === "xai" ? "Grok video" : "Sora video"}</small>
         </div>
       </aside>
 
@@ -1186,6 +1201,7 @@ function App() {
             localBudget={localBudget}
             setLocalBudget={setLocalBudget}
             isMeasuring={isMeasuring}
+            budget={budgetStatus}
         />
 
         <ProviderGuide
@@ -1374,6 +1390,7 @@ function App() {
             primaryLabel="Ask OpenAI + generate"
             busyLabel="OpenAI is preparing image"
             disabled={isRouting}
+            costHint={actionCostHint("image", imageModel)}
             onGenerate={() => callAssistantRouter({ mode: "image" })}
           >
             <ModelPicker
@@ -1394,12 +1411,13 @@ function App() {
           <GeneratorCard
             icon={<Sparkles size={22} />}
             title="Edit Existing Image"
-            subtitle="Upload a photo, let OpenAI refine the edit, then apply it with Grok Image Pro"
+            subtitle="Upload a photo, let OpenAI refine the edit, then apply it with the selected Grok image model"
             prompt={editPrompt}
             setPrompt={setEditPrompt}
             primaryLabel="Ask OpenAI + edit existing image"
             busyLabel="Editing workflow running"
             disabled={isRouting}
+            costHint={actionCostHint("image_edit", editModel)}
             onGenerate={callImageEdit}
           >
             <input
@@ -1466,8 +1484,9 @@ function App() {
             prompt={videoPrompt}
             setPrompt={setVideoPrompt}
             primaryLabel="Ask OpenAI + video"
-            busyLabel="OpenAI is preparing video"
-            disabled={isRouting}
+            busyLabel={videoBudgetBlocked ? "Budget too low for video" : "OpenAI is preparing video"}
+            disabled={isRouting || videoBudgetBlocked}
+            costHint={videoBudgetBlocked ? "Video is disabled because the remaining monthly budget is below the next video estimate." : actionCostHint("video", videoModel)}
             onGenerate={callAssistantRouter}
           >
             <ModelPicker
@@ -1696,7 +1715,7 @@ function EditStudioWorkspace({ source, userPrompt, session, route, activity, isR
   const result = session?.result;
   const refinedPrompt = session?.refinedPrompt || route?.plan?.prompt_improvements || "";
   const provider = session?.provider || providerLabel(route?.execution?.provider || route?.plan?.recommended_provider || "xai");
-  const model = session?.model || route?.execution?.model || route?.plan?.recommended_model || "Grok Image Pro";
+  const model = session?.model || route?.execution?.model || route?.plan?.recommended_model || "Grok Image";
   const status = session?.status || "idle";
   const timeline = buildEditTimeline({ source, userPrompt, refinedPrompt, session, activity, result });
   const history = olderResults.filter((item) => item.kind === "image").slice(0, 5);
@@ -2200,16 +2219,27 @@ function outputLabel(action) {
   }[action] || "Suggested result";
 }
 
-function CostPanel({ estimate, usageLog, todayStats, localBudget, setLocalBudget, isMeasuring }) {
+function CostPanel({ estimate, usageLog, todayStats, localBudget, setLocalBudget, isMeasuring, budget }) {
   const sessionTotal = usageLog.reduce((total, item) => total + item.costUsd, 0);
-  const remaining = Math.max(0, Number(localBudget || 0) - sessionTotal);
+  const strictLimit = Number(budget?.monthlyBudgetUsd ?? localBudget ?? 5);
+  const strictSpent = Number(budget?.spentThisMonthUsd ?? sessionTotal);
+  const remaining = Math.max(0, Number(budget?.remainingUsd ?? strictLimit - strictSpent));
+  const budgetPercent = strictLimit > 0 ? Math.min(100, (strictSpent / strictLimit) * 100) : 100;
   const last = usageLog[0];
 
   return (
     <section className="costPanel" aria-label="API usage and billing estimate">
+      <div className="budgetGuard">
+        <div>
+          <span>Strict monthly budget</span>
+          <strong>Used {formatUsd(strictSpent)} / {formatUsd(strictLimit)} this month</strong>
+        </div>
+        <em>{formatUsd(remaining)} remaining</em>
+        <i><b style={{ width: `${budgetPercent}%` }} /></i>
+      </div>
       <div className="costHero">
         <span>Next AI call</span>
-        <strong>{formatUsd(estimate.costUsd)}</strong>
+        <strong>{formatUsd(budget?.estimatedActionCostUsd ?? estimate.costUsd)}</strong>
         <small>{estimate.model} Â· approx before request</small>
       </div>
       <div className="costMetric">
@@ -2228,7 +2258,7 @@ function CostPanel({ estimate, usageLog, todayStats, localBudget, setLocalBudget
           <small>$</small>
           <input value={localBudget} min="0" step="0.5" type="number" onChange={(event) => setLocalBudget(Number(event.target.value))} />
         </div>
-        <em>{formatUsd(remaining)} remaining locally</em>
+        <em>{budget ? "Server budget enforced" : `${formatUsd(remaining)} remaining locally`}</em>
       </label>
       <div className={`costPulse ${isMeasuring ? "active" : ""}`}>
         <i />
@@ -2963,7 +2993,7 @@ function ShoppingModal({ guide, onClose }) {
   );
 }
 
-function GeneratorCard({ icon, title, subtitle, prompt, setPrompt, primaryLabel, busyLabel = "Working", disabled = false, onGenerate, children }) {
+function GeneratorCard({ icon, title, subtitle, prompt, setPrompt, primaryLabel, busyLabel = "Working", disabled = false, costHint = "", onGenerate, children }) {
   return (
     <article className="generatorCard">
       <div className="panelHeader">
@@ -2981,6 +3011,7 @@ function GeneratorCard({ icon, title, subtitle, prompt, setPrompt, primaryLabel,
         <summary>Advanced settings</summary>
         <div className="generatorControls">{children}</div>
       </details>
+      {costHint && <div className="actionCostHint">{costHint}</div>}
       <button className="generateButton" onClick={onGenerate} disabled={disabled}>
         <Wand2 size={18} />
         {disabled ? busyLabel : primaryLabel}
