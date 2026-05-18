@@ -2286,13 +2286,13 @@ function BillingDashboard({ usageLog, mediaResults, files, snapshot, localBudget
 
 function BillingOverviewCards({ metrics }) {
   const cards = [
-    { label: "Total Cost", value: formatUsd(metrics.monthSpend), note: "Logged usage this month", icon: CreditCard, tone: "gold", trend: "+ live" },
+    { label: "Total Cost", value: formatUsd(metrics.monthSpend), note: metrics.openaiOfficialAvailable ? "Grok tracked + OpenAI official" : "Logged usage this month", icon: CreditCard, tone: "gold", trend: "+ live" },
     { label: "Grok / xAI cost", value: formatUsd(metrics.grokSpend), note: "Real-time xAI pricing map", icon: Sparkles, tone: "green", trend: "accurate" },
-    { label: "OpenAI cost", value: formatUsd(metrics.openaiSpend), note: "Logged OpenAI calls", icon: Wand2, tone: "blue", trend: metrics.openaiSpend ? "tracked" : "needs costs API" },
+    { label: "OpenAI official", value: metrics.openaiOfficialAvailable ? formatUsd(metrics.openaiOfficialSpend) : "--", note: metrics.openaiOfficialMessage || "OpenAI Costs API", icon: Wand2, tone: "blue", trend: metrics.openaiOfficialAvailable ? "official" : "setup" },
     { label: "Storage Used", value: formatBytes(metrics.storageBytes), note: "Local outputs folder", icon: Database, tone: "violet", trend: `${metrics.uploads} uploads` },
     { label: "Image Generation", value: String(metrics.images), note: `${formatUsd(metrics.averageCost)} average generation`, icon: ImagePlus, tone: "amber", trend: "images" },
     { label: "Video Generation", value: String(metrics.videos), note: "Saved video outputs", icon: Clapperboard, tone: "rose", trend: "videos" },
-    { label: "Estimated Next Bill", value: formatUsd(metrics.estimatedNextBill), note: "Projected from current pace", icon: CreditCard, tone: "slate", trend: "projection" },
+    { label: "OpenAI tracked", value: formatUsd(metrics.openaiLocalSpend), note: `Difference ${formatUsd(metrics.openaiDifference)}`, icon: CreditCard, tone: "slate", trend: "local" },
     { label: "Failed Jobs", value: String(metrics.failed), note: "Stopped, rejected or failed", icon: CircleCheck, tone: metrics.failed ? "rose" : "green", trend: metrics.failed ? "review" : "clean" }
   ];
   return (
@@ -2765,25 +2765,38 @@ function buildBillingMetrics({ usageLog, mediaResults, files, snapshot, localBud
     ? monthUsage.filter((item) => !["xai", "grok", "Grok / xAI"].includes(item.provider))
     : monthUsage;
   const billingUsage = [...localUsage, ...manifestUsage];
-  const monthSpend = billingUsage.reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
   const grokSpend = snapshot?.totals?.grokSpend ?? billingUsage.filter((item) => ["xai", "grok", "Grok / xAI"].includes(item.provider)).reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
-  const openaiSpend = snapshot?.totals?.openaiSpend ?? billingUsage.filter((item) => item.provider === "openai" || item.provider === "OpenAI").reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
+  const openaiLocalSpend = snapshot?.totals?.openaiSpend ?? billingUsage.filter((item) => item.provider === "openai" || item.provider === "OpenAI").reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
+  const openaiOfficial = snapshot?.openaiOfficial || {};
+  const openaiOfficialAvailable = openaiOfficial.status === "completed" && Number.isFinite(Number(openaiOfficial.totalCostUsd));
+  const openaiOfficialSpend = openaiOfficialAvailable ? Number(openaiOfficial.totalCostUsd || 0) : 0;
+  const openaiSpend = openaiOfficialAvailable ? openaiOfficialSpend : openaiLocalSpend;
+  const monthSpend = grokSpend + openaiSpend;
   const generationItems = billingUsage.filter((item) => ["Image", "Video"].includes(item.type));
   const images = mediaResults.filter((item) => item.kind === "image").length;
   const videos = mediaResults.filter((item) => item.kind === "video").length;
   const failed = monthUsage.filter((item) => ["failed", "stopped", "rejected"].includes(item.status)).length + (snapshot?.failedJobs || 0);
+  const providerSummary = summarizeBy(billingUsage, "provider");
+  const openaiProvider = providerSummary.find((item) => item.provider === "openai" || item.provider === "OpenAI");
+  if (openaiProvider && openaiOfficialAvailable) openaiProvider.cost = openaiOfficialSpend;
+  if (!openaiProvider && openaiOfficialAvailable) providerSummary.push({ provider: "OpenAI", count: 1, cost: openaiOfficialSpend });
   return {
     monthSpend,
-    estimatedNextBill: snapshot?.totals?.estimatedNextBill ?? monthSpend * 1.18,
+    estimatedNextBill: openaiOfficialAvailable ? monthSpend * 1.18 : snapshot?.totals?.estimatedNextBill ?? monthSpend * 1.18,
     grokSpend,
     openaiSpend,
+    openaiLocalSpend,
+    openaiOfficialSpend,
+    openaiOfficialAvailable,
+    openaiOfficialMessage: openaiOfficialAvailable ? "Official OpenAI Costs API" : openaiOfficial.message || "Admin key required",
+    openaiDifference: openaiOfficialAvailable ? openaiOfficialSpend - openaiLocalSpend : 0,
     images,
     videos,
     uploads: files.length + (snapshot?.uploads || 0),
     storageBytes: snapshot?.storage?.totalBytes || estimateMediaStorage(mediaResults),
     averageCost: generationItems.length ? monthSpend / generationItems.length : 0,
     failed,
-    providerSummary: summarizeBy(billingUsage, "provider"),
+    providerSummary,
     modelSummary: summarizeBy(billingUsage, "model"),
     dailyTrend: buildDailyBillingTrend(billingUsage),
     remainingBudget: Math.max(0, Number(localBudget || 0) - monthSpend)

@@ -48,6 +48,8 @@ const getXAI = () => {
   return new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: "https://api.x.ai/v1" });
 };
 
+const getOpenAIAdminKey = () => process.env.OPENAI_ADMIN_API_KEY || "";
+
 const GROK_MEASUREMENT_SYSTEM_PROMPT = `
 You are Grok Measurement Expert, a world-class fashion and anthropometric vision AI.
 Analyze the uploaded image of a person for fashion fit estimation.
@@ -529,6 +531,89 @@ function calculateAccurateCost(provider, model, usage = {}, type = "") {
   const inputCost = (inputTokens / 1_000_000) * (pricing.input || 0);
   const outputCost = (outputTokens / 1_000_000) * (pricing.output || 0);
   return Number((inputCost + outputCost).toFixed(6));
+}
+
+async function fetchOpenAIOfficialBilling({ days = 30 } = {}) {
+  const apiKey = getOpenAIAdminKey();
+  if (!apiKey) {
+    return {
+      status: "unavailable",
+      source: "openai_costs_api",
+      message: "OPENAI_ADMIN_API_KEY is not configured.",
+      totalCostUsd: null,
+      buckets: []
+    };
+  }
+
+  const endTime = Math.floor(Date.now() / 1000);
+  const startTime = endTime - Math.max(1, Number(days || 30)) * 24 * 60 * 60;
+  const url = new URL("https://api.openai.com/v1/organization/costs");
+  url.searchParams.set("start_time", String(startTime));
+  url.searchParams.set("end_time", String(endTime));
+  url.searchParams.set("bucket_width", "1d");
+  url.searchParams.set("limit", "180");
+
+  try {
+    const headers = { Authorization: `Bearer ${apiKey}` };
+    if (process.env.OPENAI_ORG_ID) headers["OpenAI-Organization"] = process.env.OPENAI_ORG_ID;
+    if (process.env.OPENAI_PROJECT_ID) headers["OpenAI-Project"] = process.env.OPENAI_PROJECT_ID;
+
+    const response = await fetch(url, { headers });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return {
+        status: "error",
+        source: "openai_costs_api",
+        message: payload?.error?.message || `OpenAI Costs API returned ${response.status}.`,
+        totalCostUsd: null,
+        buckets: []
+      };
+    }
+
+    const buckets = normalizeOpenAICostBuckets(payload);
+    const totalCostUsd = Number(buckets.reduce((sum, bucket) => sum + Number(bucket.costUsd || 0), 0).toFixed(6));
+    return {
+      status: "completed",
+      source: "openai_costs_api",
+      generatedAt: new Date().toISOString(),
+      period: { startTime, endTime, days },
+      totalCostUsd,
+      currency: "usd",
+      buckets
+    };
+  } catch (error) {
+    return {
+      status: "error",
+      source: "openai_costs_api",
+      message: error.message || "OpenAI official billing request failed.",
+      totalCostUsd: null,
+      buckets: []
+    };
+  }
+}
+
+function normalizeOpenAICostBuckets(payload = {}) {
+  const buckets = Array.isArray(payload.data) ? payload.data : [];
+  return buckets.map((bucket) => {
+    const results = Array.isArray(bucket.results) ? bucket.results : [];
+    const costUsd = results.reduce((sum, item) => sum + extractOpenAICostAmount(item), 0);
+    return {
+      startTime: bucket.start_time,
+      endTime: bucket.end_time,
+      label: bucket.start_time ? new Date(bucket.start_time * 1000).toISOString().slice(5, 10) : "",
+      costUsd: Number(costUsd.toFixed(6)),
+      resultCount: results.length
+    };
+  });
+}
+
+function extractOpenAICostAmount(item = {}) {
+  const amount = item.amount;
+  if (typeof amount === "number") return amount;
+  if (amount && typeof amount.value === "number") return amount.value;
+  if (amount && typeof amount.amount === "number") return amount.amount;
+  if (typeof item.cost === "number") return item.cost;
+  return 0;
 }
 
 function attachCostToSaved(saved = [], costUsd = 0, metadata = {}) {
@@ -1346,6 +1431,7 @@ app.get("/api/billing/summary", async (_req, res) => {
     const storage = await buildStorageSummary();
     const failedJobs = manifest.filter((item) => ["failed", "rejected", "stopped", "blocked"].includes(item.status || item.finalStatus || item.summary?.finalStatus)).length;
     const totals = buildBillingTotals(manifest);
+    const openaiOfficial = await fetchOpenAIOfficialBilling({ days: 30 });
     res.json({
       status: "completed",
       generatedAt: new Date().toISOString(),
@@ -1354,6 +1440,7 @@ app.get("/api/billing/summary", async (_req, res) => {
       uploads: 0,
       storage,
       totals,
+      openaiOfficial,
       providerSummary: totals.providerSummary,
       modelSummary: totals.modelSummary,
       recentAssets: manifest.slice(0, 80)
@@ -1361,6 +1448,12 @@ app.get("/api/billing/summary", async (_req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message || "Billing summary failed." });
   }
+});
+
+app.get("/api/billing/openai-live", async (req, res) => {
+  const days = Math.min(90, Math.max(1, Number(req.query.days || 30)));
+  const result = await fetchOpenAIOfficialBilling({ days });
+  res.status(result.status === "unavailable" || result.status === "error" ? 202 : 200).json(result);
 });
 
 app.post("/api/open-output", async (req, res) => {
