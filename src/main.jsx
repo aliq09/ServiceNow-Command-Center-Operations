@@ -133,7 +133,7 @@ function App() {
   const [notice, setNotice] = useState({ tone: "neutral", text: "Upload model photos to begin a measurement-ready session." });
   const [usageLog, setUsageLog] = useState([]);
   const [mediaResults, setMediaResults] = useState([]);
-  const [operation, setOperation] = useState({ type: "Idle", provider: "OpenAI", status: "ready", step: -1, message: "No generation running." });
+  const [operation, setOperation] = useState({ type: "No active request", provider: "No provider active", status: "ready", step: -1, message: "Start a measurement, image edit, generation, or video job to see live provider stages here." });
   const [progressOverlay, setProgressOverlay] = useState(null);
   const [agentMessages, setAgentMessages] = useState([
     {
@@ -182,6 +182,7 @@ function App() {
   const editInputRef = useRef(null);
   const agentInputRef = useRef(null);
   const routeTimersRef = useRef([]);
+  const measurementTimersRef = useRef([]);
   const todayStats = useMemo(() => buildTodayStats(usageLog), [usageLog]);
   const agentCost = useMemo(() => buildAgentCostStats(usageLog), [usageLog]);
 
@@ -254,6 +255,7 @@ function App() {
     formData.append("reference", item.file);
     formData.append("provider", forcedProvider);
     formData.append("model", selectedModel);
+    startMeasurementActivity(forcedProvider, selectedModel);
     setIsMeasuring(true);
     setWorkflowState("analyzing");
     setProgressOverlay({ type: "Measurement", provider: providerLabel(forcedProvider), label: "Analysing", progress: 28, quality: "Vision" });
@@ -265,6 +267,14 @@ function App() {
       if (!response.ok) throw new Error(result.error || "Measurement request failed.");
       if (result.status !== "completed") {
         setNotice({ tone: "warning", text: compactMessage(result.message || "Measurement endpoint is ready.") });
+        setOperation({
+          type: "Measurement analysis",
+          provider: providerLabel(forcedProvider),
+          model: selectedModel,
+          status: "failed",
+          step: 1,
+          message: compactMessage(result.message || "Provider is not ready for measurement.")
+        });
         return;
       }
 
@@ -277,15 +287,32 @@ function App() {
       setWorkflowState("completed");
       const scoreText = result.measurement.confidenceScore ? `${result.measurement.confidenceScore}%` : result.measurement.confidence || "available";
       setNotice({ tone: "success", text: `Completed via ${result.provider === "xai" ? "Grok/xAI" : "OpenAI"} API · confidence ${scoreText}` });
+      setOperation({
+        type: "Measurement analysis",
+        provider: providerLabel(result.provider || forcedProvider),
+        model: result.model || selectedModel,
+        status: "completed",
+        step: 3,
+        message: `${result.provider === "xai" ? "Grok/xAI" : "OpenAI"} returned measurements, UK sizing, and confidence ${scoreText}.`
+      });
       setProgressOverlay({ type: "Measurement", provider: providerLabel(result.provider || forcedProvider), label: "Completed", progress: 100, quality: "Vision", done: true });
       setTimeout(() => setProgressOverlay(null), 1400);
     } catch (error) {
       setWorkflowState("fallback");
+      setOperation({
+        type: "Measurement analysis",
+        provider: providerLabel(forcedProvider),
+        model: selectedModel,
+        status: "failed",
+        step: 1,
+        message: compactMessage(error.message)
+      });
       setProgressOverlay({ type: "Measurement", provider: providerLabel(forcedProvider), label: "Fallback", progress: 100, quality: "Vision", failed: true });
       setTimeout(() => setProgressOverlay(null), 1600);
       setNotice({ tone: "warning", text: compactMessage(error.message) });
       setFitProfile(buildDraftFitProfile(item, "AI estimate failed; showing draft fallback."));
     } finally {
+      clearMeasurementTimers();
       setIsMeasuring(false);
     }
   };
@@ -735,6 +762,37 @@ function App() {
   const clearRouteTimers = () => {
     routeTimersRef.current.forEach((timer) => clearTimeout(timer));
     routeTimersRef.current = [];
+  };
+
+  const clearMeasurementTimers = () => {
+    measurementTimersRef.current.forEach((timer) => clearTimeout(timer));
+    measurementTimersRef.current = [];
+  };
+
+  const startMeasurementActivity = (provider, model) => {
+    clearMeasurementTimers();
+    const label = providerLabel(provider);
+    const shortProvider = provider === "xai" ? "Grok/xAI" : "OpenAI";
+    setOperation({
+      type: "Measurement analysis",
+      provider: label,
+      model,
+      status: "running",
+      step: 0,
+      message: `Preparing the uploaded image for ${shortProvider} vision measurement.`
+    });
+    measurementTimersRef.current = [
+      setTimeout(() => {
+        setOperation((current) => current.type === "Measurement analysis"
+          ? { ...current, step: 1, message: `Sending the image to ${shortProvider} using ${model}.` }
+          : current);
+      }, 450),
+      setTimeout(() => {
+        setOperation((current) => current.type === "Measurement analysis"
+          ? { ...current, step: 2, message: `${shortProvider} is reading body proportions, confidence, and sizing signals.` }
+          : current);
+      }, 1300)
+    ];
   };
 
   const startRouteActivity = (routeMode, reference) => {
@@ -1889,21 +1947,22 @@ function CommandPalette({ onClose, setActiveMode, onUpload, onRoute, isRouting }
 function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
   const latestResult = mediaResults[0];
   const historyResults = mediaResults.slice(1, 7);
+  const isActiveRequest = ["running", "queued"].includes(operation.status);
 
   return (
     <section className="resultsStudio">
-      <div className="operationPanel">
+      <div className={`operationPanel ${isActiveRequest ? "isLive" : ""}`}>
         <div>
           <span>Current request</span>
           <strong>{operation.type}</strong>
-          <small>{operation.provider}{operation.model ? ` Â· ${operation.model}` : ""}</small>
+          <small>{operation.provider}{operation.model ? ` · ${operation.model}` : ""}</small>
         </div>
         <div className="operationSteps eventSteps">
           {operationSteps.map((step, index) => (
             <div key={step} className={`operationStep ${index <= operation.step ? "active" : ""} ${operation.status}`}>
               <i>{index + 1}</i>
               <span>{step}</span>
-              <small>{index < operation.step ? "Done" : index === operation.step ? operation.status : "Waiting"}</small>
+              <small>{operationStepStatus(operation, index)}</small>
             </div>
           ))}
         </div>
@@ -1964,6 +2023,24 @@ function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
       </div>
     </section>
   );
+}
+
+function operationStepStatus(operation, index) {
+  if (operation.status === "ready" || operation.step < 0) return "Waiting";
+  if (operation.status === "failed") {
+    if (index < operation.step) return "Done";
+    if (index === operation.step) return "Failed";
+    return "Stopped";
+  }
+  if (operation.status === "queued") {
+    if (index < operation.step) return "Done";
+    if (index === operation.step) return "Queued";
+    return "Waiting";
+  }
+  if (operation.status === "completed") return index <= operation.step ? "Done" : "Waiting";
+  if (index < operation.step) return "Done";
+  if (index === operation.step) return "Working";
+  return "Waiting";
 }
 
 function GrokAgentChat({ messages, input, setInput, attachImage, setAttachImage, activeImageName, activeImageUrl, agentFileName, agentFileUrl, agentReference, onBrowse, onClearFile, agentCost, isThinking, onSend, onApply }) {

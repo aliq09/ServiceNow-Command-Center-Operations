@@ -8876,6 +8876,26 @@ body {
   padding: var(--space-4) !important;
 }
 
+.operationPanel.isLive {
+  border-color: rgba(74, 157, 124, 0.24) !important;
+  box-shadow: 0 10px 32px rgba(74, 157, 124, 0.1) !important;
+}
+
+.operationPanel.isLive > div:first-child::after {
+  content: "Live";
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(74, 157, 124, 0.12);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
 .operationPanel > div:first-child,
 .galleryHeader {
   display: flex !important;
@@ -8981,6 +9001,29 @@ body {
 .eventSteps .operationStep.active small {
   background: rgba(74, 157, 124, 0.12);
   color: var(--accent) !important;
+}
+
+.eventSteps .operationStep.running.active i,
+.eventSteps .operationStep.queued.active i {
+  background: var(--accent) !important;
+  color: #fff !important;
+  box-shadow: 0 0 0 5px rgba(74, 157, 124, 0.12);
+}
+
+.eventSteps .operationStep.running.active small,
+.eventSteps .operationStep.queued.active small {
+  background: rgba(74, 157, 124, 0.14);
+  color: var(--accent) !important;
+}
+
+.eventSteps .operationStep.failed.active i {
+  background: rgba(214, 69, 69, 0.14) !important;
+  color: var(--error) !important;
+}
+
+.eventSteps .operationStep.failed.active small {
+  background: rgba(214, 69, 69, 0.12);
+  color: var(--error) !important;
 }
 
 .mediaGalleryModern {
