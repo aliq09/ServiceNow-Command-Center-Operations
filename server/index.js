@@ -1227,9 +1227,9 @@ function validateImageUpload(file) {
 async function geminiFetch(pathname, body, { method = "POST" } = {}) {
   const key = getGeminiKey();
   if (!key) throw new Error("Set GEMINI_API_KEY to use Google Gemini.");
-  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${pathname}?key=${encodeURIComponent(key)}`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${pathname}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", "X-goog-api-key": key },
     body: method === "GET" ? undefined : JSON.stringify(body)
   });
   const payload = await response.json().catch(() => ({}));
