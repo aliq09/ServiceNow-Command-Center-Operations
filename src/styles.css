@@ -8855,3 +8855,285 @@ body {
     width: 100% !important;
   }
 }
+
+/* Returned media: compact event-driven result studio */
+.resultsStudio {
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: var(--space-3) !important;
+}
+
+.operationPanel,
+.mediaGalleryModern {
+  border: 1px solid var(--border) !important;
+  border-radius: var(--radius-xl) !important;
+  background: var(--card) !important;
+  box-shadow: var(--shadow-sm) !important;
+  overflow: hidden;
+}
+
+.operationPanel {
+  padding: var(--space-4) !important;
+}
+
+.operationPanel > div:first-child,
+.galleryHeader {
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.operationPanel span,
+.galleryHeader span,
+.mediaHistoryTray > span,
+.latestMediaBody span {
+  color: var(--primary) !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase;
+}
+
+.operationPanel strong,
+.galleryHeader strong {
+  color: var(--foreground) !important;
+  font-size: 18px !important;
+  line-height: 1.2;
+}
+
+.operationPanel small,
+.operationPanel p,
+.galleryHeader small {
+  color: var(--muted-foreground) !important;
+  font-size: 12px !important;
+}
+
+.eventSteps {
+  position: relative;
+  display: grid !important;
+  grid-template-columns: 1fr !important;
+  gap: 0 !important;
+  padding: 2px 0;
+}
+
+.eventSteps::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  top: 18px;
+  bottom: 18px;
+  width: 1px;
+  background: var(--border);
+}
+
+.eventSteps .operationStep {
+  position: relative;
+  min-height: 0 !important;
+  display: grid !important;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: var(--muted-foreground) !important;
+}
+
+.eventSteps .operationStep i {
+  position: relative;
+  z-index: 1;
+  width: 24px !important;
+  height: 24px !important;
+  border-radius: var(--radius-full);
+  display: grid;
+  place-items: center;
+  background: var(--muted) !important;
+  color: var(--muted-foreground) !important;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.eventSteps .operationStep.active i {
+  background: rgba(74, 157, 124, 0.14) !important;
+  color: var(--accent) !important;
+}
+
+.eventSteps .operationStep span {
+  color: var(--foreground) !important;
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.eventSteps .operationStep small {
+  min-width: 54px;
+  border-radius: var(--radius-full);
+  padding: 3px 7px;
+  background: var(--muted);
+  color: var(--muted-foreground) !important;
+  font-size: 10px !important;
+  font-weight: 700;
+  text-align: center;
+}
+
+.eventSteps .operationStep.active small {
+  background: rgba(74, 157, 124, 0.12);
+  color: var(--accent) !important;
+}
+
+.mediaGalleryModern {
+  display: grid !important;
+  gap: var(--space-3) !important;
+  padding: var(--space-4) !important;
+}
+
+.latestMediaCard {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2);
+  background: var(--muted);
+}
+
+.latestMediaPreview {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #151111;
+}
+
+.latestMediaPreview img,
+.latestMediaPreview video {
+  width: 100%;
+  height: 132px;
+  display: block;
+  object-fit: cover;
+}
+
+.latestMediaBody {
+  min-width: 0;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+
+.latestMediaBody strong {
+  color: var(--foreground);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.latestMediaBody small,
+.latestMediaBody p {
+  min-width: 0;
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.openLocationButton {
+  width: fit-content;
+  min-height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.openLocationButton:hover {
+  border-color: var(--primary);
+  background: rgba(201, 165, 92, 0.14);
+}
+
+.mediaHistoryTray {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.mediaHistoryTray > div {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 72px;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.mediaHistoryItem {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 5px;
+  padding: 5px;
+  background: var(--card);
+  cursor: pointer;
+}
+
+.mediaHistoryItem img,
+.mediaHistoryItem video {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: #151111;
+}
+
+.mediaHistoryItem small {
+  color: var(--muted-foreground);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modernEmptyGallery {
+  min-height: 150px;
+  border: 1px dashed var(--border-strong) !important;
+  border-radius: var(--radius-lg);
+  display: grid !important;
+  place-items: center;
+  align-content: center;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background:
+    radial-gradient(circle at center, rgba(201, 165, 92, 0.09), transparent 55%),
+    var(--muted) !important;
+  color: var(--muted-foreground) !important;
+  text-align: center;
+}
+
+.modernEmptyGallery svg {
+  color: var(--primary);
+}
+
+.modernEmptyGallery strong {
+  color: var(--foreground);
+  font-size: 15px;
+}
+
+.modernEmptyGallery span {
+  max-width: 260px;
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+@media (max-width: 1180px) {
+  .latestMediaCard {
+    grid-template-columns: 96px minmax(0, 1fr);
+  }
+}

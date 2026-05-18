@@ -1883,6 +1883,9 @@ function CommandPalette({ onClose, setActiveMode, onUpload, onRoute, isRouting }
 }
 
 function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
+  const latestResult = mediaResults[0];
+  const historyResults = mediaResults.slice(1, 7);
+
   return (
     <section className="resultsStudio">
       <div className="operationPanel">
@@ -1891,47 +1894,68 @@ function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
           <strong>{operation.type}</strong>
           <small>{operation.provider}{operation.model ? ` Â· ${operation.model}` : ""}</small>
         </div>
-        <div className="operationSteps">
+        <div className="operationSteps eventSteps">
           {operationSteps.map((step, index) => (
             <div key={step} className={`operationStep ${index <= operation.step ? "active" : ""} ${operation.status}`}>
               <i>{index + 1}</i>
               <span>{step}</span>
+              <small>{index < operation.step ? "Done" : index === operation.step ? operation.status : "Waiting"}</small>
             </div>
           ))}
         </div>
         <p>{operation.message}</p>
       </div>
 
-      <div className="mediaGallery">
+      <div className="mediaGallery mediaGalleryModern">
         <div className="galleryHeader">
-          <span>Returned media</span>
-          <strong>{mediaResults.length} saved result{mediaResults.length === 1 ? "" : "s"}</strong>
+          <div>
+            <span>Returned media</span>
+            <strong>{mediaResults.length} saved result{mediaResults.length === 1 ? "" : "s"}</strong>
+          </div>
+          {latestResult && <small>Latest output saved locally</small>}
         </div>
         {mediaResults.length ? (
-          <div className="mediaGrid">
-            {mediaResults.slice(0, 6).map((item) => (
-              <article key={item.id} className="mediaTile">
-                {item.kind === "video" ? (
-                  <video src={item.url} controls />
+          <>
+            <article className="latestMediaCard">
+              <div className="latestMediaPreview">
+                {latestResult.kind === "video" ? (
+                  <video src={latestResult.url} controls />
                 ) : (
-                  <img src={item.url} alt={item.label} />
+                  <img src={latestResult.url} alt={latestResult.label} />
                 )}
-                <div className="mediaTileBody">
-                  <span>{item.label}</span>
-                  <strong>{item.provider} Â· {item.model}</strong>
-                  <small title={item.path || item.url}>
-                    Saved locally Â· {displaySavedLocation(item)}
-                  </small>
-                  <button type="button" className="openLocationButton" onClick={() => onOpenLocation?.(item)}>
-                    <FolderOpen size={14} />
-                    Open saved folder
-                  </button>
+              </div>
+              <div className="latestMediaBody">
+                <span>Latest result</span>
+                <strong>{latestResult.label}</strong>
+                <small>{latestResult.provider} · {latestResult.model}</small>
+                <p title={latestResult.path || latestResult.url}>Saved locally · {displaySavedLocation(latestResult)}</p>
+                <button type="button" className="openLocationButton" onClick={() => onOpenLocation?.(latestResult)}>
+                  <FolderOpen size={14} />
+                  Open saved folder
+                </button>
+              </div>
+            </article>
+
+            {historyResults.length > 0 && (
+              <div className="mediaHistoryTray" aria-label="Earlier returned media">
+                <span>Earlier outputs</span>
+                <div>
+                  {historyResults.map((item) => (
+                    <button key={item.id} type="button" className="mediaHistoryItem" onClick={() => onOpenLocation?.(item)} title={item.path || item.url}>
+                      {item.kind === "video" ? <video src={item.url} /> : <img src={item.url} alt={item.label} />}
+                      <small>{item.label}</small>
+                    </button>
+                  ))}
                 </div>
-              </article>
-            ))}
-          </div>
+              </div>
+            )}
+          </>
         ) : (
-          <div className="emptyGallery">Generated and edited media will appear here after the API returns files.</div>
+          <div className="emptyGallery modernEmptyGallery">
+            <Sparkles size={22} />
+            <strong>No returned media yet</strong>
+            <span>Generated, edited, and video outputs will appear here after the provider returns files.</span>
+          </div>
         )}
       </div>
     </section>
