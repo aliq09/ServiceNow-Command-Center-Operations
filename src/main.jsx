@@ -206,7 +206,7 @@ function App() {
       const saved = JSON.parse(localStorage.getItem("atelierUsageLog") || "[]");
       if (Array.isArray(saved)) setUsageLog(saved);
       const savedMedia = JSON.parse(localStorage.getItem("atelierMediaResults") || "[]");
-      if (Array.isArray(savedMedia)) setMediaResults(savedMedia);
+      if (Array.isArray(savedMedia)) setMediaResults(sortMediaResults(savedMedia));
     } catch {
       setUsageLog([]);
       setMediaResults([]);
@@ -372,7 +372,7 @@ function App() {
       if (!response.ok) throw new Error(result.error || "Request failed.");
       const saved = normalizeSavedMedia(result.saved, type, result.provider || provider, result.model || model);
       if (saved.length) {
-        setMediaResults((current) => [...saved, ...current].slice(0, 24));
+        setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
         if (type === "image") {
           setAgentReference(saved[0]);
           setAgentFile(null);
@@ -469,7 +469,7 @@ function App() {
       setMinimalStyling(result);
       const saved = normalizeSavedMedia(result.saved, "image", result.provider || "xai", result.model || editModel, "Minimal styling");
       if (saved.length) {
-        setMediaResults((current) => [...saved, ...current].slice(0, 24));
+        setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
         setAgentReference(saved[0]);
         setAgentFile(null);
       }
@@ -694,7 +694,7 @@ function App() {
       );
 
       if (saved.length) {
-        setMediaResults((current) => [...saved, ...current].slice(0, 24));
+        setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
         const nextImage = saved.find((item) => item.kind === "image");
         if (nextImage) {
           setAgentReference(nextImage);
@@ -1029,7 +1029,7 @@ function App() {
 
       const saved = normalizeSavedMedia(execution.saved, plan.mode === "video" ? "video" : "image", execution.provider || plan.recommended_provider, execution.model || plan.recommended_model, "Assistant routed result");
       if (saved.length) {
-        setMediaResults((current) => [...saved, ...current].slice(0, 24));
+        setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
         const firstImage = saved.find((item) => item.kind === "image");
         if (firstImage) {
           setAgentReference(firstImage);
@@ -1976,8 +1976,9 @@ function CommandPalette({ onClose, setActiveMode, onUpload, onRoute, isRouting }
 }
 
 function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
-  const latestResult = mediaResults[0];
-  const historyResults = mediaResults.slice(1, 7);
+  const orderedResults = sortMediaResults(mediaResults);
+  const latestResult = orderedResults[0];
+  const historyResults = orderedResults.slice(1, 12);
   const isActiveRequest = ["running", "queued"].includes(operation.status);
 
   return (
@@ -2001,58 +2002,128 @@ function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
       </div>
 
       <div className="mediaGallery mediaGalleryModern">
-        <div className="galleryHeader">
-          <div>
-            <span>Returned media</span>
-            <strong>{mediaResults.length} saved result{mediaResults.length === 1 ? "" : "s"}</strong>
-          </div>
-          {latestResult && <small>Latest output saved locally</small>}
-        </div>
-        {mediaResults.length ? (
+        <ReturnedMediaHeader count={orderedResults.length} latestResult={latestResult} isLoading={isActiveRequest} />
+        {orderedResults.length ? (
           <>
-            <article className="latestMediaCard">
-              <div className="latestMediaPreview">
-                {latestResult.kind === "video" ? (
-                  <video src={latestResult.url} controls />
-                ) : (
-                  <img src={latestResult.url} alt={latestResult.label} />
-                )}
-              </div>
-              <div className="latestMediaBody">
-                <span>Latest result</span>
-                <strong>{latestResult.label}</strong>
-                <small>{latestResult.provider} · {latestResult.model}</small>
-                <p title={latestResult.path || latestResult.url}>Saved locally · {displaySavedLocation(latestResult)}</p>
-                <button type="button" className="openLocationButton" onClick={() => onOpenLocation?.(latestResult)}>
-                  <FolderOpen size={14} />
-                  Open saved folder
-                </button>
-              </div>
-            </article>
-
-            {historyResults.length > 0 && (
-              <div className="mediaHistoryTray" aria-label="Earlier returned media">
-                <span>Earlier outputs</span>
-                <div>
-                  {historyResults.map((item) => (
-                    <button key={item.id} type="button" className="mediaHistoryItem" onClick={() => onOpenLocation?.(item)} title={item.path || item.url}>
-                      {item.kind === "video" ? <video src={item.url} /> : <img src={item.url} alt={item.label} />}
-                      <small>{item.label}</small>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
+            <LatestResultCard result={latestResult} onOpenLocation={onOpenLocation} />
+            <MediaHistoryRail results={historyResults} activeResult={latestResult} onOpenLocation={onOpenLocation} />
           </>
+        ) : isActiveRequest ? (
+          <ReturnedMediaLoadingState operation={operation} />
         ) : (
-          <div className="emptyGallery modernEmptyGallery">
-            <Sparkles size={22} />
-            <strong>No returned media yet</strong>
-            <span>Generated, edited, and video outputs will appear here after the provider returns files.</span>
-          </div>
+          <EmptyReturnedMediaState />
         )}
       </div>
     </section>
+  );
+}
+
+function ReturnedMediaHeader({ count, latestResult, isLoading }) {
+  return (
+    <div className="galleryHeader returnedMediaHeader">
+      <div>
+        <span>Returned media</span>
+        <strong>{count} saved result{count === 1 ? "" : "s"}</strong>
+      </div>
+      <small>{latestResult ? `Latest saved ${relativeSavedTime(latestResult)}` : isLoading ? "Waiting for provider output" : "No saved outputs yet"}</small>
+    </div>
+  );
+}
+
+function LatestResultCard({ result, onOpenLocation }) {
+  if (!result) return null;
+  return (
+    <article className="latestMediaCard">
+      <div className="latestMediaPreview">
+        {result.kind === "video" ? (
+          <video src={result.url} controls />
+        ) : (
+          <img src={result.url} alt={result.label} />
+        )}
+      </div>
+      <div className="latestMediaBody">
+        <span>Latest result</span>
+        <strong>{result.label}</strong>
+        <ResultMetadata result={result} />
+        <ResultActions result={result} onOpenLocation={onOpenLocation} />
+      </div>
+    </article>
+  );
+}
+
+function ResultMetadata({ result }) {
+  return (
+    <div className="resultMetadata">
+      <small>{result.provider} · {result.model || "selected model"}</small>
+      <p title={result.path || result.url}>Stored locally · {displaySavedLocation(result)}</p>
+      <time>{relativeSavedTime(result)} · {result.createdAt || "Saved output"}</time>
+    </div>
+  );
+}
+
+function ResultActions({ result, onOpenLocation }) {
+  return (
+    <div className="resultActionRow">
+      <button type="button" className="openLocationButton primary" onClick={() => onOpenLocation?.(result)}>
+        <FolderOpen size={14} />
+        Open saved folder
+      </button>
+      <a className="openLocationButton secondary" href={result.url} target="_blank" rel="noreferrer">
+        View full
+      </a>
+    </div>
+  );
+}
+
+function MediaHistoryRail({ results, activeResult, onOpenLocation }) {
+  if (!results.length) return null;
+  return (
+    <div className="mediaHistoryTray" aria-label="Earlier returned media">
+      <div className="mediaHistoryTitle">
+        <span>Earlier outputs</span>
+        <small>Newest to oldest</small>
+      </div>
+      <div className="mediaHistoryScroller">
+        {results.map((item) => (
+          <MediaThumbCard key={item.id} item={item} active={activeResult?.id === item.id} onOpenLocation={onOpenLocation} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MediaThumbCard({ item, active, onOpenLocation }) {
+  return (
+    <button type="button" className={`mediaHistoryItem ${active ? "active" : ""}`} onClick={() => onOpenLocation?.(item)} title={item.path || item.url}>
+      <span className="mediaThumbFrame">
+        {item.kind === "video" ? <video src={item.url} /> : <img src={item.url} alt={item.label} />}
+      </span>
+      <strong>{item.label}</strong>
+      <small>{relativeSavedTime(item)}</small>
+    </button>
+  );
+}
+
+function EmptyReturnedMediaState() {
+  return (
+    <div className="emptyGallery modernEmptyGallery">
+      <Sparkles size={22} />
+      <strong>No returned media yet</strong>
+      <span>Generated, edited, and video outputs will appear here with the latest result highlighted first.</span>
+    </div>
+  );
+}
+
+function ReturnedMediaLoadingState({ operation }) {
+  return (
+    <div className="returnedMediaLoading">
+      <div className="mediaSkeletonPreview" />
+      <div>
+        <span>Waiting for media</span>
+        <strong>{operation.type}</strong>
+        <small>{operation.provider} is working. The returned file will become the latest result automatically.</small>
+      </div>
+    </div>
   );
 }
 
@@ -2612,6 +2683,7 @@ async function appendReferenceToFormData(formData, source, fieldName = "referenc
 }
 
 function normalizeSavedMedia(saved = [], kind = "image", provider = "openai", model = "", label = "") {
+  const savedAt = new Date().toISOString();
   return (saved || []).map((item) => ({
     id: crypto.randomUUID(),
     kind: kind === "video" ? "video" : "image",
@@ -2622,6 +2694,7 @@ function normalizeSavedMedia(saved = [], kind = "image", provider = "openai", mo
     path: item.path,
     filename: item.filename,
     costUsd: Number(item.costUsd || item.estimatedCostUsd || 0),
+    savedAt,
     createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   })).filter((item) => item.url);
 }
@@ -2660,6 +2733,7 @@ function manifestToMediaResult(item) {
     path: item.path,
     filename: item.filename,
     costUsd: Number(item.costUsd || item.estimatedCostUsd || 0),
+    savedAt: item.createdAt || new Date().toISOString(),
     createdAt: item.createdAt
       ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -2668,13 +2742,43 @@ function manifestToMediaResult(item) {
 
 function mergeMediaResults(current = [], incoming = []) {
   const seen = new Set();
-  return [...incoming, ...current].filter((item) => {
+  return sortMediaResults([...incoming, ...current].filter((item) => {
     if (!item?.url) return false;
     const key = item.filename || item.url;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  });
+  }));
+}
+
+function sortMediaResults(items = []) {
+  return [...items].sort((a, b) => mediaTimestamp(b) - mediaTimestamp(a));
+}
+
+function mediaTimestamp(item = {}) {
+  if (item.savedAt) {
+    const value = Date.parse(item.savedAt);
+    if (Number.isFinite(value)) return value;
+  }
+  if (item.createdAt) {
+    const value = Date.parse(item.createdAt);
+    if (Number.isFinite(value)) return value;
+  }
+  const fromFilename = String(item.filename || item.url || "").match(/-(\d{10,})-/);
+  if (fromFilename) return Number(fromFilename[1]);
+  return 0;
+}
+
+function relativeSavedTime(item = {}) {
+  const timestamp = mediaTimestamp(item);
+  if (!timestamp) return item.createdAt || "Saved locally";
+  const seconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+  if (seconds < 60) return "Saved just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `Saved ${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `Saved ${hours} hr ago`;
+  return `Saved ${Math.floor(hours / 24)} day${hours >= 48 ? "s" : ""} ago`;
 }
 
 function displaySavedLocation(item) {
