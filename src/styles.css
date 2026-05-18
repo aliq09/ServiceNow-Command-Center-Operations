@@ -8525,9 +8525,13 @@ body {
 }
 
 .billingDashboard {
-  display: flex !important;
+  display: none !important;
   flex-direction: column;
   gap: var(--space-5) !important;
+}
+
+.mode-billing .billingDashboard {
+  display: flex !important;
 }
 
 .billingHeroModern {
