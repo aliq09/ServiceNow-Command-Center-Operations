@@ -738,8 +738,15 @@ async function executeImageGenerationTool(provider, prompt, { model, quality = "
 
   const openai = getOpenAI();
   if (!openai) throw new Error("Set OPENAI_API_KEY to generate images with OpenAI.");
-  const image = await openai.images.generate({ model: model || imageModel, prompt, quality, size, n: 1 });
-  return { status: "completed", provider: "openai", model: model || imageModel, saved: await saveMediaOutputs(image, "images", "openai-generated"), image };
+  const resolvedModel = model || imageModel;
+  const image = await openai.images.generate({ model: resolvedModel, prompt, quality, size, n: 1 });
+  return {
+    status: "completed",
+    provider: "openai",
+    model: resolvedModel,
+    saved: await saveMediaOutputs(image, "images", "openai-generated", { provider: "openai", model: resolvedModel, status: "completed", jobType: "image_generation" }),
+    image
+  };
 }
 
 async function executeXaiImageEditTool(file, prompt, { model = xaiImageModel, quality = "high", size = "auto" }) {
@@ -910,7 +917,7 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
       n: 1
     });
 
-    const saved = await saveMediaOutputs(image, "images", "openai-generated");
+    const saved = await saveMediaOutputs(image, "images", "openai-generated", { provider: "openai", model: model || imageModel, status: "completed", jobType: "image_generation" });
     res.json({ status: "completed", provider: "openai", model: model || imageModel, image, saved });
   } catch (error) {
     res.status(500).json({ error: error.message || "Image generation failed." });
@@ -1335,7 +1342,7 @@ app.post("/api/analyze/image", upload.single("reference"), async (req, res) => {
 
 app.get("/api/billing/summary", async (_req, res) => {
   try {
-    const manifest = (await readOutputManifest()).map(hydrateBillingCost);
+    const manifest = await buildRecentAssetIndex();
     const storage = await buildStorageSummary();
     const failedJobs = manifest.filter((item) => ["failed", "rejected", "stopped", "blocked"].includes(item.status || item.finalStatus || item.summary?.finalStatus)).length;
     const totals = buildBillingTotals(manifest);
@@ -1349,7 +1356,7 @@ app.get("/api/billing/summary", async (_req, res) => {
       totals,
       providerSummary: totals.providerSummary,
       modelSummary: totals.modelSummary,
-      recentAssets: manifest.slice(0, 60)
+      recentAssets: manifest.slice(0, 80)
     });
   } catch (error) {
     res.status(500).json({ error: error.message || "Billing summary failed." });
@@ -1397,6 +1404,85 @@ async function saveMediaOutputs(payload, folder, prefix, metadata = {}) {
 
   await appendManifest(saved.map((item) => ({ ...item, type: folder, createdAt: new Date().toISOString() })));
   return saved;
+}
+
+async function buildRecentAssetIndex() {
+  const manifestItems = (await readOutputManifest()).map(repairManifestAsset).map(hydrateBillingCost);
+  const folderItems = await scanOutputMediaFiles();
+  const byKey = new Map();
+
+  for (const item of [...folderItems, ...manifestItems]) {
+    const repaired = hydrateBillingCost(repairManifestAsset(item));
+    const key = repaired.filename || repaired.url || repaired.path || `${repaired.type}-${repaired.createdAt}`;
+    const current = byKey.get(key);
+    byKey.set(key, { ...(current || {}), ...repaired });
+  }
+
+  return [...byKey.values()].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+}
+
+async function scanOutputMediaFiles() {
+  const folders = [
+    { folder: "images", absolute: path.join(outputRoot, "images") },
+    { folder: "videos", absolute: path.join(outputRoot, "videos") }
+  ];
+  const rows = [];
+
+  for (const target of folders) {
+    let entries = [];
+    try {
+      entries = await fs.readdir(target.absolute, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      const filePath = path.join(target.absolute, entry.name);
+      const stat = await fs.stat(filePath);
+      rows.push(repairManifestAsset({
+        type: target.folder,
+        filename: entry.name,
+        path: filePath,
+        url: `/outputs/${target.folder}/${entry.name}`,
+        createdAt: stat.mtime.toISOString(),
+        sizeBytes: stat.size,
+        status: "completed"
+      }));
+    }
+  }
+
+  return rows;
+}
+
+function repairManifestAsset(item = {}) {
+  const filename = item.filename || (item.path ? path.basename(item.path) : "");
+  const folder = item.type === "videos" || String(item.jobType || "").includes("video") ? "videos" : "images";
+  const inferred = inferAssetMetadata(filename, item);
+  const url = item.url || (filename ? `/outputs/${folder}/${filename}` : "");
+  const filePath = item.path || (filename ? path.join(outputRoot, folder, filename) : "");
+
+  return {
+    ...item,
+    ...inferred,
+    provider: item.provider || inferred.provider,
+    model: item.model || inferred.model,
+    jobType: item.jobType || inferred.jobType,
+    status: item.status || "completed",
+    filename,
+    path: filePath,
+    url,
+    type: item.type || folder
+  };
+}
+
+function inferAssetMetadata(filename = "", item = {}) {
+  if (filename.startsWith("xai-edited")) return { provider: "xai", model: xaiImageModel, jobType: "image_edit" };
+  if (filename.startsWith("xai-generated")) return { provider: "xai", model: xaiImageModel, jobType: "image_generation" };
+  if (filename.startsWith("xai-video")) return { provider: "xai", model: xaiVideoModel, jobType: "video_generation" };
+  if (filename.startsWith("openai-generated")) return { provider: "openai", model: imageModel, jobType: "image_generation" };
+  if (String(item.sourceUrl || "").includes("x.ai")) return { provider: "xai", model: xaiImageModel, jobType: "image_generation" };
+  return {};
 }
 
 function resolveOutputPath({ path: requestedPath, url }) {
