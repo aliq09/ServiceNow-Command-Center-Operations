@@ -7586,6 +7586,47 @@ body {
 .confidenceBadge.high { background: #247e55; }
 .confidenceBadge.medium { background: #b98223; }
 .confidenceBadge.low { background: #b24747; }
+.measurementProviderNote {
+  display: grid;
+  gap: 4px;
+  margin: 12px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(80, 64, 44, .12);
+  border-radius: 14px;
+  background: rgba(255, 252, 247, .72);
+}
+.measurementProviderNote span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.measurementProviderNote strong {
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.35;
+}
+.measurementProviderNote small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.remeasureActions {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  margin: 12px 0 14px;
+}
+.remeasureActions .remeasureButton {
+  margin-bottom: 0;
+}
+.remeasureButton.openaiPrimary {
+  background: rgba(74, 157, 124, .12);
+  border-color: rgba(74, 157, 124, .24);
+  color: #1f513f;
+  box-shadow: none;
+}
 .remeasureButton.grokPrimary { box-shadow: 0 14px 30px rgba(180, 132, 49, .22); }
 @media (max-width: 760px) { .globalSizeGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 

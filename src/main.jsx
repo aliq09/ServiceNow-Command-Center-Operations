@@ -1300,6 +1300,12 @@ function App() {
               models={measurementModelOptions[measurementProvider]}
             />
 
+            <div className="measurementProviderNote">
+              <span>Measurement cost guide</span>
+              <strong>{measurementProvider === "xai" ? "Grok is currently the lower-cost measurement path in your logged usage." : "OpenAI is selected first for this measurement scan."}</strong>
+              <small>{measurementProvider === "xai" ? "OpenAI scan is available below for comparison; Grok AI remains available for second-opinion rescans." : "Use Grok AI below for a second-opinion rescan when needed."}</small>
+            </div>
+
             <div className="fitSummary">
               {fitProfile.recommendations.map((item) => (
                 <button
@@ -1340,10 +1346,16 @@ function App() {
               ))}
             </div>
 
-            <button className="remeasureButton grokPrimary" type="button" disabled={!activeFile || isMeasuring} onClick={() => activeFile && requestMeasurement(activeFile, "xai")}>
-              <ScanLine size={17} />
-              {isMeasuring ? "Measuring..." : "Re-run with Grok"}
-            </button>
+            <div className="remeasureActions">
+              <button className="remeasureButton openaiPrimary" type="button" disabled={!activeFile || isMeasuring} onClick={() => activeFile && requestMeasurement(activeFile, "openai")}>
+                <Wand2 size={17} />
+                {isMeasuring ? "Measuring..." : "Run OpenAI scan"}
+              </button>
+              <button className="remeasureButton grokPrimary" type="button" disabled={!activeFile || isMeasuring} onClick={() => activeFile && requestMeasurement(activeFile, "xai")}>
+                <ScanLine size={17} />
+                {isMeasuring ? "Measuring..." : "Re-run with Grok AI"}
+              </button>
+            </div>
 
             <div className="stylingNote">
               <Shirt size={18} />
