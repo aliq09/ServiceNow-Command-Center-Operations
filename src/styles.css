@@ -9536,3 +9536,169 @@ body {
     grid-auto-columns: 104px !important;
   }
 }
+
+/* Measurement workspace polish: keep provider info useful without stealing space */
+.providerGuideCompact {
+  display: grid !important;
+  gap: 10px !important;
+  padding: 14px 16px !important;
+  border: 1px solid rgba(42, 34, 28, 0.1) !important;
+  border-radius: 18px !important;
+  background: rgba(255, 253, 250, 0.86) !important;
+  box-shadow: 0 12px 32px rgba(26, 22, 20, 0.06) !important;
+}
+
+.providerGuideCompact > div:first-child {
+  display: grid !important;
+  gap: 2px !important;
+}
+
+.providerGuideCompact span {
+  color: var(--primary) !important;
+  font-size: 10px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.08em !important;
+  text-transform: uppercase !important;
+}
+
+.providerGuideCompact strong {
+  color: var(--foreground) !important;
+  font-size: 16px !important;
+  line-height: 1.2 !important;
+}
+
+.providerGuideCompact p {
+  max-width: none !important;
+  margin: 0 !important;
+  color: var(--muted-foreground) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+}
+
+.providerMiniStats {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 6px !important;
+}
+
+.providerMiniStats span {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 28px !important;
+  padding: 0 10px !important;
+  border: 1px solid rgba(42, 34, 28, 0.1) !important;
+  border-radius: 999px !important;
+  background: rgba(245, 242, 237, 0.82) !important;
+  color: var(--foreground) !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.theme-dark .providerGuideCompact {
+  background: rgba(28, 25, 23, 0.9) !important;
+  border-color: rgba(255, 250, 240, 0.1) !important;
+}
+
+.theme-dark .providerMiniStats span {
+  background: rgba(255, 250, 240, 0.06) !important;
+  border-color: rgba(255, 250, 240, 0.1) !important;
+}
+
+.mode-measure .previewPanel {
+  overflow: hidden !important;
+  border-radius: 20px !important;
+  box-shadow: 0 18px 56px rgba(26, 22, 20, 0.1) !important;
+}
+
+.mode-measure .emptyPreview {
+  position: relative !important;
+  min-height: 540px !important;
+  padding: 52px 28px !important;
+  border: 1px dashed rgba(201, 165, 92, 0.34) !important;
+  border-radius: 18px !important;
+  background:
+    radial-gradient(circle at 50% 34%, rgba(201, 165, 92, 0.12), transparent 30%),
+    linear-gradient(135deg, rgba(255, 253, 250, 0.96), rgba(245, 242, 237, 0.82)) !important;
+}
+
+.mode-measure .emptyPreview::before {
+  content: "" !important;
+  position: absolute !important;
+  inset: 18px !important;
+  pointer-events: none !important;
+  border: 1px solid rgba(42, 34, 28, 0.06) !important;
+  border-radius: 14px !important;
+}
+
+.mode-measure .emptyPreview .emptyMark {
+  width: 76px !important;
+  height: 76px !important;
+  margin-bottom: 18px !important;
+  border-radius: 22px !important;
+  background: linear-gradient(135deg, rgba(201, 165, 92, 0.24), rgba(201, 165, 92, 0.1)) !important;
+  color: var(--primary) !important;
+  box-shadow: 0 14px 32px rgba(201, 165, 92, 0.16) !important;
+}
+
+.mode-measure .emptyPreview strong {
+  max-width: 560px !important;
+  color: var(--foreground) !important;
+  font-size: clamp(28px, 3vw, 42px) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.mode-measure .emptyPreview span {
+  max-width: 420px !important;
+  color: var(--muted-foreground) !important;
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+}
+
+.mode-measure .emptyPreview button {
+  min-height: 46px !important;
+  margin-top: 22px !important;
+  padding: 0 22px !important;
+  border: 0 !important;
+  border-radius: 14px !important;
+  background: linear-gradient(135deg, var(--primary), #b8913f) !important;
+  color: #1a1614 !important;
+  box-shadow: 0 12px 28px rgba(201, 165, 92, 0.24) !important;
+}
+
+.mode-measure .emptyPreview button:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 16px 36px rgba(201, 165, 92, 0.3) !important;
+}
+
+@media (min-width: 1181px) {
+  .mode-measure .workspace {
+    grid-template-columns: minmax(780px, 1fr) minmax(330px, 370px) !important;
+  }
+
+  .mode-measure .previewPanel {
+    min-height: calc(100vh - 255px) !important;
+  }
+
+  .mode-measure .previewPanel > img {
+    width: 100% !important;
+    max-height: calc(100vh - 245px) !important;
+    object-fit: contain !important;
+  }
+
+  .mode-measure .measurePanel {
+    max-height: 560px !important;
+  }
+
+  .mode-measure .workspace > .providerGuide {
+    align-self: start !important;
+  }
+}
+
+@media (max-width: 1180px) {
+  .mode-measure .emptyPreview {
+    min-height: 420px !important;
+  }
+}

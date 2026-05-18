@@ -2543,39 +2543,22 @@ function BillingDetailSheet({ row, onClose, onOpenLocation }) {
 function ProviderGuide({ measurementProvider, imageProvider, videoProvider }) {
   const grokActive = measurementProvider === "xai" || imageProvider === "xai" || videoProvider === "xai";
   const activeModes = [
-    measurementProvider === "xai" ? "image analysis" : null,
-    imageProvider === "xai" ? "image generation" : null,
-    videoProvider === "xai" ? "video generation" : null
+    measurementProvider === "xai" ? "Measurement" : null,
+    imageProvider === "xai" ? "Image" : null,
+    videoProvider === "xai" ? "Video" : null
   ].filter(Boolean);
 
   return (
-    <section className={`providerGuide ${grokActive ? "grok" : ""}`}>
+    <section className={`providerGuide providerGuideCompact ${grokActive ? "grok" : ""}`}>
       <div>
-        <span>{grokActive ? "Grok / xAI mode" : "OpenAI mode"}</span>
-        <strong>{grokActive ? activeModes.join(" + ") : "Measurement, image and video via OpenAI"}</strong>
+        <span>Active AI engine</span>
+        <strong>{grokActive ? "Grok / xAI is active" : "OpenAI is active"}</strong>
       </div>
-      <div className="guideSteps">
-        <span>1 Analysis</span>
-        <span>2 Generate image</span>
-        <span>3 Animate video</span>
-        <span>4 Enhance future</span>
-      </div>
-      <p>
-        {grokActive
-          ? "Grok uses xAI base URL https://api.x.ai/v1. Best mode uses Grok 4.20 Reasoning for measurement, Grok Imagine Image Pro for images, and Grok Imagine Video for video."
-          : "OpenAI uses GPT-5.2 vision for measurement, GPT-image-2 for images, and Sora for video."}
-      </p>
-      {grokActive && (
-        <div className="guidePricing">
-          <span>Image Pro approx $0.07 each</span>
-          <span>Image standard approx $0.02</span>
-          <span>Video approx $0.05/sec</span>
-          <span>Vision token priced</span>
-        </div>
-      )}
-      <div className="enhanceBadge">
-        <Sparkles size={16} />
-        <span>Enhancement-ready: future image edit/upscale workflow can sit here without changing upload flow.</span>
+      <p>{grokActive ? `${activeModes.join(", ")} workflows are routed through Grok where selected.` : "Measurement, image and video workflows are routed through OpenAI where selected."}</p>
+      <div className="providerMiniStats">
+        <span>{measurementProvider === "xai" ? "Grok vision" : "OpenAI vision"}</span>
+        <span>{imageProvider === "xai" ? "Grok image" : "OpenAI image"}</span>
+        <span>{videoProvider === "xai" ? "Grok video" : "Sora video"}</span>
       </div>
     </section>
   );
