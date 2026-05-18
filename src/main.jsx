@@ -722,6 +722,10 @@ function App() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Billing summary unavailable.");
       setBillingSnapshot(result);
+      const manifestMedia = (result.recentAssets || []).map(manifestToMediaResult).filter(Boolean);
+      if (manifestMedia.length) {
+        setMediaResults((current) => mergeMediaResults(current, manifestMedia).slice(0, 60));
+      }
       if (activeMode === "billing") setNotice({ tone: "success", text: "Billing snapshot refreshed." });
     } catch (error) {
       setNotice({ tone: "warning", text: compactMessage(error.message) });
@@ -2501,6 +2505,57 @@ function normalizeSavedMedia(saved = [], kind = "image", provider = "openai", mo
     costUsd: Number(item.costUsd || item.estimatedCostUsd || 0),
     createdAt: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   })).filter((item) => item.url);
+}
+
+function manifestToMediaResult(item) {
+  if (!item?.url) return null;
+  const url = String(item.url);
+  const outputType = String(item.type || item.jobType || "").toLowerCase();
+  const isImage = outputType.includes("image") || url.includes("/outputs/images/");
+  const isVideo = outputType.includes("video") || url.includes("/outputs/videos/");
+  if (!isImage && !isVideo) return null;
+
+  const model = item.model || "";
+  const provider = item.provider === "xai" || item.provider === "grok" || model.toLowerCase().includes("grok")
+    ? "Grok / xAI"
+    : item.provider === "openai"
+      ? "OpenAI"
+      : providerLabel(item.provider);
+  const kind = isVideo ? "video" : "image";
+  const jobType = String(item.jobType || item.type || "").toLowerCase();
+  const label = jobType.includes("edit")
+    ? "Edited image"
+    : jobType.includes("minimal")
+      ? "Minimal styling"
+      : kind === "video"
+        ? "Generated video"
+        : "Generated image";
+
+  return {
+    id: `manifest-${item.filename || url}`,
+    kind,
+    label,
+    provider,
+    model,
+    url,
+    path: item.path,
+    filename: item.filename,
+    costUsd: Number(item.costUsd || item.estimatedCostUsd || 0),
+    createdAt: item.createdAt
+      ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+      : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  };
+}
+
+function mergeMediaResults(current = [], incoming = []) {
+  const seen = new Set();
+  return [...incoming, ...current].filter((item) => {
+    if (!item?.url) return false;
+    const key = item.filename || item.url;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function displaySavedLocation(item) {
