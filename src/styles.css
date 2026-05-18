@@ -8808,6 +8808,11 @@ body {
   background: transparent !important;
 }
 
+.billingProviderPill.gemini {
+  color: var(--info) !important;
+  background: transparent !important;
+}
+
 @media (max-width: 1280px) {
   .workspace {
     grid-template-columns: 1fr !important;

@@ -16,6 +16,10 @@ const xaiMeasurementModel = process.env.XAI_MEASUREMENT_MODEL || "grok-4.20-0309
 const xaiImageModel = process.env.XAI_IMAGE_MODEL || "grok-imagine-image";
 const xaiVideoModel = process.env.XAI_VIDEO_MODEL || "grok-imagine-video";
 const xaiAgentModel = process.env.XAI_AGENT_MODEL || "grok-4.20-0309-non-reasoning";
+const geminiMeasurementModel = process.env.GEMINI_MEASUREMENT_MODEL || "gemini-2.5-flash";
+const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "imagen-3.0-generate-002";
+const geminiEditModel = process.env.GEMINI_EDIT_MODEL || "gemini-2.5-flash-image";
+const geminiVideoModel = process.env.GEMINI_VIDEO_MODEL || "veo-3.1-generate-preview";
 const orchestrationModel = process.env.OPENAI_ORCHESTRATION_MODEL || "gpt-5.2";
 const minimalStylingMaxAttempts = 2;
 const minimalStylingCostEstimate = 0.02;
@@ -32,6 +36,16 @@ const XAI_PRICING = {
   "grok-imagine-video": { per_video: 0.25 },
   measurement: { fixed: 0.0035 },
   agent: { input: 0.00125, output: 0.0025 }
+};
+const GEMINI_PRICING = {
+  [geminiMeasurementModel]: { input: Number(process.env.GEMINI_MEASUREMENT_INPUT_PER_M || 0.3), output: Number(process.env.GEMINI_MEASUREMENT_OUTPUT_PER_M || 2.5) },
+  [geminiImageModel]: { per_image: Number(process.env.GEMINI_IMAGEN_COST || 0.04) },
+  [geminiEditModel]: { per_image: Number(process.env.GEMINI_NANO_BANANA_EDIT_COST || 0.039) },
+  [geminiVideoModel]: { per_second: Number(process.env.GEMINI_VEO_COST_PER_SECOND || 0.4) },
+  image_generation: { per_image: Number(process.env.GEMINI_IMAGEN_COST || 0.04) },
+  image_edit: { per_image: Number(process.env.GEMINI_NANO_BANANA_EDIT_COST || 0.039) },
+  video_generation: { per_second: Number(process.env.GEMINI_VEO_COST_PER_SECOND || 0.4) },
+  measurement: { fixed: Number(process.env.GEMINI_MEASUREMENT_COST || 0.0035) }
 };
 const measurementRates = {
   inputPerMillion: 1.75,
@@ -55,6 +69,7 @@ const getXAI = () => {
   return new OpenAI({ apiKey: process.env.XAI_API_KEY, baseURL: "https://api.x.ai/v1" });
 };
 
+const getGeminiKey = () => process.env.GEMINI_API_KEY || "";
 const getOpenAIAdminKey = () => process.env.OPENAI_ADMIN_API_KEY || "";
 
 const GROK_MEASUREMENT_SYSTEM_PROMPT = `
@@ -111,6 +126,11 @@ app.get("/api/health", async (_req, res) => {
       xaiImageModel,
       xaiVideoModel,
       xaiAgentModel,
+      hasGeminiKey: Boolean(process.env.GEMINI_API_KEY),
+      geminiMeasurementModel,
+      geminiImageModel,
+      geminiEditModel,
+      geminiVideoModel,
       monthlyBudgetUsd: MONTHLY_BUDGET_USD,
       budget: await getBudgetStatus("image", xaiImageModel),
       cwd: process.cwd()
@@ -201,6 +221,9 @@ Available execution providers and tools:
 - Grok image analysis: use as an alternative vision analyzer when the user asks for Grok or comparison.
 - Grok image generation/editing: use for Grok Imagine generation, image edits, restyling, and image-to-image workflows.
 - Grok video generation: use for Grok Imagine image-to-video and fast creative video exploration.
+- Gemini Imagen 3: use as a third image generation provider when the user selects Gemini or wants Google image generation.
+- Gemini Nano Banana: use for Gemini image editing/restyling when the user selects Gemini for edits.
+- Gemini Veo 3.1: use for Gemini image-to-video generation and long-running video jobs when Gemini is selected.
 - Internal tools: prompt_refinement, suggest_next_step, export/history.
 
 Return only valid JSON. Do not include markdown.
@@ -208,10 +231,10 @@ Schema:
 {
   "intent": "image_generate|image_edit|image_enhance|image_consistency|image_to_video|style_transfer|measurement_analysis|prompt_refinement|suggest_next_step",
   "mode": "measure|image|edit|video|agent",
-  "recommended_provider": "openai|xai|internal",
+  "recommended_provider": "openai|xai|gemini|internal",
   "recommended_model": "model id",
   "recommended_action": "analyze_image|generate_image|edit_image|generate_video|refine_prompt|suggest_next_step",
-  "tool_route": "openai.measurement|openai.image.generate|openai.video.generate|xai.measurement|xai.image.generate|xai.image.edit|xai.video.generate|internal.prompt",
+  "tool_route": "openai.measurement|openai.image.generate|openai.video.generate|xai.measurement|xai.image.generate|xai.image.edit|xai.video.generate|gemini.measurement|gemini.image.generate|gemini.image.edit|gemini.video.generate|internal.prompt",
   "execute": true,
   "prompt_improvements": "improved prompt or empty string",
   "user_visible_explanation": "short reason in plain English",
@@ -224,6 +247,7 @@ Routing rules:
 - If the user asks for measurements or UK sizes, choose openai.measurement by default.
 - If the user asks to create a new image from text, choose openai.image.generate by default unless they ask for Grok.
 - If the user asks image-to-video or animate this image, choose xai.video.generate if an image is attached; otherwise choose openai.video.generate for text-to-video.
+- If the UI/user selected Gemini, keep the route on Gemini: gemini.image.generate for images, gemini.image.edit for edits, gemini.video.generate for image-to-video, gemini.measurement for vision analysis.
 - If the request is vague, choose internal.prompt and execute false.
 - Preserve subject identity, face, body proportions, and garment details only as a prompt instruction; never claim exact biometric accuracy.
 `;
@@ -235,6 +259,23 @@ app.post("/api/measure-image", upload.single("reference"), async (req, res) => {
 
   if (!req.file) {
     res.status(400).json({ error: "A reference image is required." });
+    return;
+  }
+
+  if (provider === "gemini") {
+    if (!getGeminiKey()) {
+      res.status(202).json({
+        status: "ready_for_gemini_key",
+        message: "Set GEMINI_API_KEY to estimate measurements with Gemini.",
+        request: { provider: "gemini", model: model || geminiMeasurementModel }
+      });
+      return;
+    }
+    try {
+      res.json(await executeMeasurementTool("gemini", req.file, model));
+    } catch (error) {
+      res.status(statusForError(error)).json({ error: error.message || "Gemini measurement failed." });
+    }
     return;
   }
 
@@ -503,6 +544,13 @@ function parseAgentJson(text) {
 
 function extractOutputText(response = {}) {
   if (response.output_text) return response.output_text;
+  if (Array.isArray(response.candidates)) {
+    return response.candidates
+      .flatMap((candidate) => candidate.content?.parts || [])
+      .map((part) => part.text || "")
+      .filter(Boolean)
+      .join("\n");
+  }
   const chunks = [];
   for (const item of response.output || []) {
     for (const content of item.content || []) {
@@ -554,6 +602,7 @@ function calculateGrokCost(model, usage = {}, units = {}) {
 }
 
 function calculateAccurateCost(provider, model, usage = {}, type = "") {
+  if (provider === "gemini" || provider === "google") return calculateGeminiCost(model, usage, type);
   if (provider !== "grok" && provider !== "xai") return Number(usage.cost || usage.costUsd || 0);
 
   const pricing = XAI_PRICING[model] || XAI_PRICING[type];
@@ -570,8 +619,26 @@ function calculateAccurateCost(provider, model, usage = {}, type = "") {
   return Number((inputCost + outputCost).toFixed(6));
 }
 
+function calculateGeminiCost(model, usage = {}, type = "") {
+  const pricing = GEMINI_PRICING[model] || GEMINI_PRICING[type];
+  if (!pricing) return 0.01;
+  const outputCount = Number(usage.output_count || usage.outputCount || usage.images || 1);
+  const seconds = Number(usage.seconds || usage.duration || 8);
+  if (pricing.per_image) return Number((pricing.per_image * outputCount).toFixed(6));
+  if (pricing.per_second) return Number((pricing.per_second * seconds).toFixed(6));
+  if (pricing.fixed) return Number(pricing.fixed.toFixed(6));
+  const inputTokens = usage.input_tokens || usage.prompt_tokens || 0;
+  const outputTokens = usage.output_tokens || usage.completion_tokens || 0;
+  const inputCost = (inputTokens / 1_000_000) * (pricing.input || 0);
+  const outputCost = (outputTokens / 1_000_000) * (pricing.output || 0);
+  return Number((inputCost + outputCost).toFixed(6));
+}
+
 function estimateActionCost(type = "image", model = "") {
   const normalized = String(type || "").toLowerCase();
+  if (String(model || "").startsWith("veo")) return calculateGeminiCost(model || geminiVideoModel, { seconds: 8 }, "video_generation");
+  if (String(model || "").startsWith("imagen")) return calculateGeminiCost(model || geminiImageModel, { output_count: 1 }, "image_generation");
+  if (String(model || "").includes("flash-image")) return calculateGeminiCost(model || geminiEditModel, { output_count: 1 }, "image_edit");
   if (normalized.includes("video")) return XAI_PRICING[xaiVideoModel]?.per_video || 0.25;
   if (normalized.includes("edit") || normalized.includes("image")) {
     const resolvedModel = model || xaiImageModel;
@@ -755,6 +822,12 @@ async function createAssistantPlan(openai, payload) {
                   measurement: xaiMeasurementModel,
                   image: [xaiImageModel, "grok-imagine-image"],
                   video: xaiVideoModel
+                },
+                gemini: {
+                  measurement: geminiMeasurementModel,
+                  image: geminiImageModel,
+                  edit: geminiEditModel,
+                  video: geminiVideoModel
                 }
               }
             })
@@ -784,7 +857,7 @@ function normalizeAssistantPlan(raw = {}) {
   return {
     intent: allowedIntents.has(raw.intent) ? raw.intent : "suggest_next_step",
     mode: ["measure", "image", "edit", "video", "agent"].includes(raw.mode) ? raw.mode : modeForRoute(route),
-    recommended_provider: ["openai", "xai", "internal"].includes(raw.recommended_provider) ? raw.recommended_provider : providerForRoute(route),
+    recommended_provider: ["openai", "xai", "gemini", "internal"].includes(raw.recommended_provider) ? raw.recommended_provider : providerForRoute(route),
     recommended_model: raw.recommended_model || modelForRoute(route),
     recommended_action: action,
     tool_route: route,
@@ -802,33 +875,33 @@ async function executeAssistantPlan(plan, options) {
     return { status: "planned", provider: "internal", model: "router", message: "OpenAI returned a prompt/workflow plan.", saved: [] };
   }
 
-  if (plan.tool_route === "openai.measurement" || plan.tool_route === "xai.measurement") {
+  if (plan.tool_route === "openai.measurement" || plan.tool_route === "xai.measurement" || plan.tool_route === "gemini.measurement") {
     if (!options.file) throw new Error("A reference image is required for measurement analysis.");
-    return executeMeasurementTool(plan.tool_route === "xai.measurement" ? "xai" : "openai", options.file, plan.recommended_model);
+    return executeMeasurementTool(providerForRoute(plan.tool_route), options.file, plan.recommended_model);
   }
 
-  if (plan.tool_route === "openai.image.generate" || plan.tool_route === "xai.image.generate") {
+  if (plan.tool_route === "openai.image.generate" || plan.tool_route === "xai.image.generate" || plan.tool_route === "gemini.image.generate") {
     if (!prompt) throw new Error("The assistant did not return a generation prompt.");
-    return executeImageGenerationTool(plan.tool_route.startsWith("xai") ? "xai" : "openai", prompt, {
+    return executeImageGenerationTool(providerForRoute(plan.tool_route), prompt, {
       model: plan.recommended_model,
       quality: options.quality,
       size: options.size
     });
   }
 
-  if (plan.tool_route === "xai.image.edit") {
+  if (plan.tool_route === "xai.image.edit" || plan.tool_route === "gemini.image.edit") {
     if (!options.file) throw new Error("A reference image is required for image editing.");
     if (!prompt) throw new Error("The assistant did not return an edit prompt.");
-    return executeXaiImageEditTool(options.file, prompt, {
-      model: plan.recommended_model || xaiImageModel,
+    return executeImageEditTool(providerForRoute(plan.tool_route), options.file, prompt, {
+      model: plan.recommended_model || (plan.tool_route.startsWith("gemini") ? geminiEditModel : xaiImageModel),
       quality: options.quality,
       size: options.size
     });
   }
 
-  if (plan.tool_route === "openai.video.generate" || plan.tool_route === "xai.video.generate") {
+  if (plan.tool_route === "openai.video.generate" || plan.tool_route === "xai.video.generate" || plan.tool_route === "gemini.video.generate") {
     if (!prompt) throw new Error("The assistant did not return a video prompt.");
-    return executeVideoTool(plan.tool_route.startsWith("xai") ? "xai" : "openai", prompt, {
+    return executeVideoTool(providerForRoute(plan.tool_route), prompt, {
       file: options.file,
       model: plan.recommended_model,
       size: options.size,
@@ -840,6 +913,52 @@ async function executeAssistantPlan(plan, options) {
 }
 
 async function executeMeasurementTool(provider, file, model) {
+  if (provider === "gemini") {
+    validateImageUpload(file);
+    if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to use Gemini vision measurement.");
+    const resolvedModel = model || geminiMeasurementModel;
+    const cacheKey = imageCacheKey(provider, resolvedModel, file);
+    const cached = getCachedMeasurement(cacheKey);
+    if (cached) {
+      return {
+        ...cached,
+        cached: true,
+        costUsd: 0,
+        costPreviewUsd: 0,
+        budget: await getBudgetStatus("measurement", resolvedModel),
+        message: "Gemini measurement returned from the 24-hour cache. No paid model call was made."
+      };
+    }
+    const budgetGuard = await enforceMonthlyBudget("measurement", resolvedModel);
+    const data = await geminiGenerateContent({
+      model: resolvedModel,
+      parts: [
+        { text: "Estimate fashion fitting measurements. Return only JSON: {\"confidence\":\"low|medium|high\",\"notes\":\"short note\",\"heightCm\":number,\"shoulderCm\":number,\"bustCm\":number,\"underbustCm\":number,\"waistCm\":number,\"hipCm\":number,\"inseamCm\":number}." },
+        { inline_data: { mime_type: file.mimetype, data: file.buffer.toString("base64") } }
+      ]
+    });
+    const usage = {
+      provider: "gemini",
+      model: resolvedModel,
+      costUsd: calculateAccurateCost("gemini", resolvedModel, data.usageMetadata || {}, "measurement"),
+      pricingSource: "local_gemini_pricing_map"
+    };
+    const result = {
+      status: "completed",
+      provider: "gemini",
+      model: resolvedModel,
+      measurement: parseMeasurementJson(extractOutputText(data)),
+      costPreviewUsd: budgetGuard.estimatedCostUsd,
+      costUsd: usage.costUsd,
+      budget: await getBudgetStatus("measurement", resolvedModel),
+      usage,
+      saved: []
+    };
+    setCachedMeasurement(cacheKey, result);
+    await appendUsageEvent({ type: "measurement", provider: "gemini", model: resolvedModel, status: "completed", costUsd: usage.costUsd, estimatedCostUsd: usage.costUsd, providerResponse: "Gemini measurement completed." });
+    return result;
+  }
+
   const client = provider === "xai" ? getXAI() : getOpenAI();
   if (!client) throw new Error(provider === "xai" ? "Set XAI_API_KEY to use Grok measurement." : "Set OPENAI_API_KEY to use OpenAI measurement.");
   const resolvedModel = model || (provider === "xai" ? xaiMeasurementModel : measurementModel);
@@ -925,8 +1044,20 @@ async function executeMeasurementTool(provider, file, model) {
 }
 
 async function executeImageGenerationTool(provider, prompt, { model, quality = "auto", size = "auto" }) {
-  const resolvedModel = model || (provider === "xai" ? xaiImageModel : imageModel);
+  const resolvedModel = model || (provider === "gemini" ? geminiImageModel : provider === "xai" ? xaiImageModel : imageModel);
   const budgetGuard = await enforceMonthlyBudget("image", resolvedModel);
+  if (provider === "gemini") {
+    if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to generate images with Gemini Imagen.");
+    const image = await geminiGenerateImage({ prompt, model: resolvedModel, size });
+    const outputCount = extractMediaAssets(image).length || 1;
+    const costUsd = calculateAccurateCost("gemini", resolvedModel, { output_count: outputCount }, "image_generation");
+    const saved = attachCostToSaved(
+      await saveMediaOutputs(image, "images", "gemini-generated", { provider: "gemini", model: resolvedModel, costUsd, estimatedCostUsd: costUsd, status: "completed", jobType: "image_generation" }),
+      costUsd,
+      { provider: "gemini", model: resolvedModel, status: "completed", jobType: "image_generation" }
+    );
+    return { status: "completed", provider: "gemini", model: resolvedModel, saved, image, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("image", resolvedModel), usage: { provider: "gemini", model: resolvedModel, costUsd, pricingSource: "local_gemini_pricing_map" } };
+  }
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to generate images with Grok/xAI.");
     const response = await fetch("https://api.x.ai/v1/images/generations", {
@@ -960,6 +1091,11 @@ async function executeImageGenerationTool(provider, prompt, { model, quality = "
   };
 }
 
+async function executeImageEditTool(provider, file, prompt, { model, quality = "high", size = "auto" }) {
+  if (provider === "gemini") return executeGeminiImageEditTool(file, prompt, { model: model || geminiEditModel, quality, size });
+  return executeXaiImageEditTool(file, prompt, { model: model || xaiImageModel, quality, size });
+}
+
 async function executeXaiImageEditTool(file, prompt, { model = xaiImageModel, quality = "high", size = "auto" }) {
   validateImageUpload(file);
   validatePrompt(prompt, "Edit prompt");
@@ -989,9 +1125,48 @@ async function executeXaiImageEditTool(file, prompt, { model = xaiImageModel, qu
   return { status: "completed", provider: "xai", model, saved, edit, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("image_edit", model), usage: { provider: "xai", model, costUsd, pricingSource: "local_xai_pricing_map" } };
 }
 
+async function executeGeminiImageEditTool(file, prompt, { model = geminiEditModel, quality = "high", size = "auto" }) {
+  validateImageUpload(file);
+  validatePrompt(prompt, "Edit prompt");
+  if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to edit images with Gemini Nano Banana.");
+  const budgetGuard = await enforceMonthlyBudget("image_edit", model);
+  const edit = await geminiGenerateContent({
+    model,
+    parts: [
+      { text: `${prompt}\n\nReturn one edited fashion image. Preserve the subject identity, pose, and realistic proportions unless the user explicitly asks otherwise.` },
+      { inline_data: { mime_type: file.mimetype, data: file.buffer.toString("base64") } }
+    ],
+    generationConfig: { responseModalities: ["IMAGE", "TEXT"] }
+  });
+  const outputCount = extractMediaAssets(edit).length || 1;
+  const costUsd = calculateAccurateCost("gemini", model, { output_count: outputCount }, "image_edit");
+  const saved = attachCostToSaved(
+    await saveMediaOutputs(edit, "images", "gemini-edited", { provider: "gemini", model, costUsd, estimatedCostUsd: costUsd, status: "completed", jobType: "image_edit" }),
+    costUsd,
+    { provider: "gemini", model, status: "completed", jobType: "image_edit" }
+  );
+  if (!saved.length) throw new Error("Gemini image edit completed but did not return an image file.");
+  return { status: "completed", provider: "gemini", model, saved, edit, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("image_edit", model), usage: { provider: "gemini", model, costUsd, pricingSource: "local_gemini_pricing_map" } };
+}
+
 async function executeVideoTool(provider, prompt, { file, model, size = "1280x720", seconds = "8" }) {
-  const resolvedModel = model || (provider === "xai" ? xaiVideoModel : "sora-2");
+  const resolvedModel = model || (provider === "gemini" ? geminiVideoModel : provider === "xai" ? xaiVideoModel : "sora-2");
   const budgetGuard = await enforceMonthlyBudget("video", resolvedModel);
+  if (provider === "gemini") {
+    if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to start Gemini Veo video jobs.");
+    const video = await geminiGenerateVideo({ prompt, file, model: resolvedModel, size, seconds });
+    const costUsd = calculateAccurateCost("gemini", resolvedModel, { seconds: Number(seconds) || 8 }, "video_generation");
+    const status = extractMediaAssets(video).length ? "completed" : "queued";
+    const saved = attachCostToSaved(
+      await saveMediaOutputs(video, "videos", "gemini-video", { provider: "gemini", model: resolvedModel, costUsd, estimatedCostUsd: costUsd, status, jobType: "video_generation" }),
+      costUsd,
+      { provider: "gemini", model: resolvedModel, status, jobType: "video_generation" }
+    );
+    if (!saved.length) {
+      await appendUsageEvent({ type: "video_generation", provider: "gemini", model: resolvedModel, status, costUsd, estimatedCostUsd: costUsd, providerResponse: `Gemini Veo operation ${video.operationName || "accepted"} is still running.` });
+    }
+    return { status, provider: "gemini", model: resolvedModel, saved, video, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "gemini", model: resolvedModel, costUsd, pricingSource: "local_gemini_pricing_map" } };
+  }
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to start Grok/xAI video jobs.");
     const body = { model: resolvedModel, prompt, duration: Math.min(15, Math.max(1, Number(seconds) || 8)), aspect_ratio: mapSizeToAspectRatio(size), resolution: "720p" };
@@ -1049,6 +1224,101 @@ function validateImageUpload(file) {
   if (file.size > 25 * 1024 * 1024) throw new Error("The reference image must be under 25 MB.");
 }
 
+async function geminiFetch(pathname, body, { method = "POST" } = {}) {
+  const key = getGeminiKey();
+  if (!key) throw new Error("Set GEMINI_API_KEY to use Google Gemini.");
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/${pathname}?key=${encodeURIComponent(key)}`, {
+    method,
+    headers: { "Content-Type": "application/json" },
+    body: method === "GET" ? undefined : JSON.stringify(body)
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload?.error?.message || `Gemini API request failed with ${response.status}.`);
+  return payload;
+}
+
+async function geminiGenerateContent({ model, parts, generationConfig = {} }) {
+  return geminiFetch(`models/${model}:generateContent`, {
+    contents: [{ role: "user", parts }],
+    generationConfig
+  });
+}
+
+async function geminiGenerateImage({ prompt, model = geminiImageModel, size = "auto" }) {
+  return geminiFetch(`models/${model}:predict`, {
+    instances: [{ prompt }],
+    parameters: { sampleCount: 1, aspectRatio: mapSizeToAspectRatio(size) }
+  });
+}
+
+async function geminiGenerateVideo({ prompt, file, model = geminiVideoModel, size = "1280x720", seconds = "8" }) {
+  const instance = { prompt };
+  if (file) {
+    instance.image = {
+      bytesBase64Encoded: file.buffer.toString("base64"),
+      mimeType: file.mimetype
+    };
+  }
+  const operation = await geminiFetch(`models/${model}:predictLongRunning`, {
+    instances: [instance],
+    parameters: {
+      aspectRatio: mapSizeToAspectRatio(size),
+      durationSeconds: Math.min(15, Math.max(1, Number(seconds) || 8)),
+      sampleCount: 1
+    }
+  });
+  const operationName = operation.name;
+  const finalOperation = operationName ? await pollGeminiOperation(operationName, 3, 4500) : operation;
+  return { ...finalOperation, operationName, initialOperation: operation };
+}
+
+async function pollGeminiOperation(operationName, attempts = 3, delayMs = 4500) {
+  let current = null;
+  for (let index = 0; index < attempts; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+    current = await geminiFetch(operationName.replace(/^\/?v1beta\//, ""), null, { method: "GET" });
+    if (current.done) return current;
+  }
+  return current || { name: operationName, done: false };
+}
+
+function providerAvailable(provider) {
+  if (provider === "gemini") return Boolean(process.env.GEMINI_API_KEY);
+  if (provider === "xai") return Boolean(process.env.XAI_API_KEY);
+  if (provider === "openai") return Boolean(process.env.OPENAI_API_KEY);
+  return false;
+}
+
+function fallbackProviders(primary, kind = "image") {
+  const all = kind === "edit" ? ["gemini", "xai"] : ["gemini", "xai", "openai"];
+  return [primary, ...all.filter((provider) => provider !== primary)].filter(providerAvailable);
+}
+
+async function executeWithProviderFallback(kind, primaryProvider, runner) {
+  const attempts = [];
+  for (const provider of fallbackProviders(primaryProvider, kind)) {
+    try {
+      const result = await runner(provider);
+      return {
+        ...result,
+        fallback: provider !== primaryProvider ? { from: primaryProvider, to: provider, attempts } : undefined
+      };
+    } catch (error) {
+      attempts.push({ provider, message: error.message || "Provider failed." });
+      await appendUsageEvent({
+        type: kind,
+        provider,
+        model: "",
+        status: "failed",
+        costUsd: 0,
+        estimatedCostUsd: 0,
+        providerResponse: error.message || "Provider failed before returning output."
+      });
+    }
+  }
+  throw new Error(attempts.map((item) => `${item.provider}: ${item.message}`).join(" | ") || "No configured provider is available.");
+}
+
 function statusForError(error, fallback = 500) {
   return /Monthly budget/i.test(error?.message || "") ? 402 : fallback;
 }
@@ -1058,15 +1328,16 @@ function cryptoRandomId(prefix) {
 }
 
 function routeForAction(action, provider = "openai") {
-  if (action === "analyze_image") return provider === "xai" ? "xai.measurement" : "openai.measurement";
-  if (action === "generate_image") return provider === "xai" ? "xai.image.generate" : "openai.image.generate";
-  if (action === "edit_image") return "xai.image.edit";
-  if (action === "generate_video") return provider === "xai" ? "xai.video.generate" : "openai.video.generate";
+  if (action === "analyze_image") return provider === "gemini" ? "gemini.measurement" : provider === "xai" ? "xai.measurement" : "openai.measurement";
+  if (action === "generate_image") return provider === "gemini" ? "gemini.image.generate" : provider === "xai" ? "xai.image.generate" : "openai.image.generate";
+  if (action === "edit_image") return provider === "gemini" ? "gemini.image.edit" : "xai.image.edit";
+  if (action === "generate_video") return provider === "gemini" ? "gemini.video.generate" : provider === "xai" ? "xai.video.generate" : "openai.video.generate";
   return "internal.prompt";
 }
 
 function providerForRoute(route) {
   if (route?.startsWith("xai.")) return "xai";
+  if (route?.startsWith("gemini.")) return "gemini";
   if (route?.startsWith("openai.")) return "openai";
   return "internal";
 }
@@ -1083,6 +1354,10 @@ function modelForRoute(route) {
   if (route === "xai.measurement") return xaiMeasurementModel;
   if (route === "xai.image.generate" || route === "xai.image.edit") return xaiImageModel;
   if (route === "xai.video.generate") return xaiVideoModel;
+  if (route === "gemini.measurement") return geminiMeasurementModel;
+  if (route === "gemini.image.generate") return geminiImageModel;
+  if (route === "gemini.image.edit") return geminiEditModel;
+  if (route === "gemini.video.generate") return geminiVideoModel;
   if (route === "openai.image.generate") return imageModel;
   if (route === "openai.video.generate") return "sora-2";
   if (route === "openai.measurement") return measurementModel;
@@ -1098,8 +1373,42 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
     return;
   }
 
+  if (provider === "gemini") {
+    if (!process.env.GEMINI_API_KEY) {
+      if (fallbackProviders("gemini", "image_generation").length) {
+        try {
+          res.json(await executeWithProviderFallback("image_generation", "gemini", (nextProvider) => executeImageGenerationTool(nextProvider, prompt, { model: nextProvider === "gemini" ? model : undefined, quality, size })));
+        } catch (error) {
+          res.status(statusForError(error)).json({ error: error.message || "Image generation fallback failed." });
+        }
+        return;
+      }
+      res.status(202).json({
+        status: "ready_for_gemini_key",
+        message: "Set GEMINI_API_KEY to generate images with Gemini Imagen.",
+        request: { provider: "gemini", model: model || geminiImageModel, quality, size, referenceCount: req.files?.length || 0 }
+      });
+      return;
+    }
+
+    try {
+      res.json(await executeWithProviderFallback("image_generation", "gemini", (nextProvider) => executeImageGenerationTool(nextProvider, prompt, { model: nextProvider === "gemini" ? model : undefined, quality, size })));
+    } catch (error) {
+      res.status(statusForError(error)).json({ error: error.message || "Gemini image generation failed." });
+    }
+    return;
+  }
+
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) {
+      if (fallbackProviders("xai", "image_generation").length) {
+        try {
+          res.json(await executeWithProviderFallback("image_generation", "xai", (nextProvider) => executeImageGenerationTool(nextProvider, prompt, { model: nextProvider === "xai" ? model : undefined, quality, size })));
+        } catch (error) {
+          res.status(statusForError(error)).json({ error: error.message || "Image generation fallback failed." });
+        }
+        return;
+      }
       res.status(202).json({
         status: "ready_for_xai_key",
         message: "Set XAI_API_KEY to generate images with Grok/xAI.",
@@ -1109,7 +1418,7 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
     }
 
     try {
-      res.json(await executeImageGenerationTool("xai", prompt, { model, quality, size }));
+      res.json(await executeWithProviderFallback("image_generation", "xai", (nextProvider) => executeImageGenerationTool(nextProvider, prompt, { model: nextProvider === "xai" ? model : undefined, quality, size })));
     } catch (error) {
       res.status(statusForError(error)).json({ error: error.message || "xAI image generation failed." });
     }
@@ -1126,14 +1435,15 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
   }
 
   try {
-    res.json(await executeImageGenerationTool("openai", prompt, { model, quality, size }));
+    res.json(await executeWithProviderFallback("image_generation", "openai", (nextProvider) => executeImageGenerationTool(nextProvider, prompt, { model: nextProvider === "openai" ? model : undefined, quality, size })));
   } catch (error) {
     res.status(statusForError(error)).json({ error: error.message || "Image generation failed." });
   }
 });
 
 app.post("/api/edit-image", upload.single("reference"), async (req, res) => {
-  const { prompt, model = xaiImageModel, quality = "high", size = "auto" } = req.body || {};
+  const { prompt, provider = "xai", model, quality = "high", size = "auto" } = req.body || {};
+  const resolvedModel = model || (provider === "gemini" ? geminiEditModel : xaiImageModel);
 
   try {
     validatePrompt(prompt, "Edit prompt");
@@ -1143,17 +1453,42 @@ app.post("/api/edit-image", upload.single("reference"), async (req, res) => {
     return;
   }
 
-  if (!process.env.XAI_API_KEY) {
+  if (provider === "gemini" && !process.env.GEMINI_API_KEY) {
+    if (fallbackProviders("gemini", "edit").length) {
+      try {
+        res.json(await executeWithProviderFallback("edit", "gemini", (nextProvider) => executeImageEditTool(nextProvider, req.file, prompt, { model: nextProvider === "gemini" ? resolvedModel : undefined, quality, size })));
+      } catch (error) {
+        res.status(statusForError(error)).json({ error: error.message || "Image edit fallback failed." });
+      }
+      return;
+    }
+    res.status(202).json({
+      status: "ready_for_gemini_key",
+      message: "Set GEMINI_API_KEY to edit images with Gemini Nano Banana.",
+      request: { provider: "gemini", model: resolvedModel, quality, size }
+    });
+    return;
+  }
+
+  if (provider !== "gemini" && !process.env.XAI_API_KEY) {
+    if (fallbackProviders("xai", "edit").length) {
+      try {
+        res.json(await executeWithProviderFallback("edit", "xai", (nextProvider) => executeImageEditTool(nextProvider, req.file, prompt, { model: nextProvider === "xai" ? resolvedModel : undefined, quality, size })));
+      } catch (error) {
+        res.status(statusForError(error)).json({ error: error.message || "Image edit fallback failed." });
+      }
+      return;
+    }
     res.status(202).json({
       status: "ready_for_xai_key",
       message: "Set XAI_API_KEY to edit images with Grok Imagine.",
-      request: { provider: "xai", model, quality, size }
+      request: { provider: "xai", model: resolvedModel, quality, size }
     });
     return;
   }
 
   try {
-    res.json(await executeXaiImageEditTool(req.file, prompt, { model, quality, size }));
+    res.json(await executeWithProviderFallback("edit", provider, (nextProvider) => executeImageEditTool(nextProvider, req.file, prompt, { model: nextProvider === provider ? resolvedModel : undefined, quality, size })));
   } catch (error) {
     const status = /required|must be|detail/i.test(error.message || "") ? 400 : 500;
     res.status(status).json({ error: error.message || "xAI image edit failed." });
@@ -1281,15 +1616,49 @@ app.post("/api/grok-agent-chat", upload.single("reference"), async (req, res) =>
 app.post("/api/generate-video", upload.single("reference"), async (req, res) => {
   const openai = getOpenAI();
   const { prompt, quality = "standard", size = "1280x720", seconds = "8", provider = "openai", model } = req.body || {};
-  const resolvedModel = model || (provider === "xai" ? xaiVideoModel : quality === "pro" ? "sora-2-pro" : "sora-2");
+  const resolvedModel = model || (provider === "gemini" ? geminiVideoModel : provider === "xai" ? xaiVideoModel : quality === "pro" ? "sora-2-pro" : "sora-2");
 
   if (!prompt) {
     res.status(400).json({ error: "Prompt is required." });
     return;
   }
 
+  if (provider === "gemini") {
+    if (!process.env.GEMINI_API_KEY) {
+      if (fallbackProviders("gemini", "video_generation").length) {
+        try {
+          res.json(await executeWithProviderFallback("video_generation", "gemini", (nextProvider) => executeVideoTool(nextProvider, prompt, { file: req.file, model: nextProvider === "gemini" ? resolvedModel : undefined, size, seconds })));
+        } catch (error) {
+          res.status(statusForError(error)).json({ error: error.message || "Video generation fallback failed." });
+        }
+        return;
+      }
+      res.status(202).json({
+        status: "ready_for_gemini_key",
+        message: "Set GEMINI_API_KEY to start Gemini Veo jobs.",
+        request: { provider: "gemini", model: resolvedModel, size, seconds, hasReference: Boolean(req.file) }
+      });
+      return;
+    }
+
+    try {
+      res.json(await executeWithProviderFallback("video_generation", "gemini", (nextProvider) => executeVideoTool(nextProvider, prompt, { file: req.file, model: nextProvider === "gemini" ? resolvedModel : undefined, size, seconds })));
+    } catch (error) {
+      res.status(statusForError(error)).json({ error: error.message || "Gemini video generation failed." });
+    }
+    return;
+  }
+
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) {
+      if (fallbackProviders("xai", "video_generation").length) {
+        try {
+          res.json(await executeWithProviderFallback("video_generation", "xai", (nextProvider) => executeVideoTool(nextProvider, prompt, { file: req.file, model: nextProvider === "xai" ? resolvedModel : undefined, size, seconds })));
+        } catch (error) {
+          res.status(statusForError(error)).json({ error: error.message || "Video generation fallback failed." });
+        }
+        return;
+      }
       res.status(202).json({
         status: "ready_for_xai_key",
         message: "Set XAI_API_KEY to start Grok/xAI video jobs.",
@@ -1299,7 +1668,7 @@ app.post("/api/generate-video", upload.single("reference"), async (req, res) => 
     }
 
     try {
-      res.json(await executeVideoTool("xai", prompt, { file: req.file, model: resolvedModel, size, seconds }));
+      res.json(await executeWithProviderFallback("video_generation", "xai", (nextProvider) => executeVideoTool(nextProvider, prompt, { file: req.file, model: nextProvider === "xai" ? resolvedModel : undefined, size, seconds })));
     } catch (error) {
       res.status(statusForError(error)).json({ error: error.message || "xAI video generation failed." });
     }
@@ -1316,7 +1685,7 @@ app.post("/api/generate-video", upload.single("reference"), async (req, res) => 
   }
 
   try {
-    res.json(await executeVideoTool("openai", prompt, { file: req.file, model: resolvedModel, size, seconds }));
+    res.json(await executeWithProviderFallback("video_generation", "openai", (nextProvider) => executeVideoTool(nextProvider, prompt, { file: req.file, model: nextProvider === "openai" ? resolvedModel : undefined, size, seconds })));
   } catch (error) {
     res.status(statusForError(error)).json({ error: error.message || "Video generation failed." });
   }
@@ -1334,9 +1703,9 @@ app.post("/api/generate/image", upload.array("references", 8), async (req, res) 
 });
 
 app.post("/api/edit/image", upload.single("reference"), async (req, res) => {
-  const { prompt, model = xaiImageModel, quality = "high", size = "auto" } = req.body || {};
+  const { prompt, provider = "xai", model, quality = "high", size = "auto" } = req.body || {};
   try {
-    res.json(await executeXaiImageEditTool(req.file, prompt, { model, quality, size }));
+    res.json(await executeImageEditTool(provider, req.file, prompt, { model: model || (provider === "gemini" ? geminiEditModel : xaiImageModel), quality, size }));
   } catch (error) {
     const status = /required|must be|detail/i.test(error.message || "") ? 400 : 500;
     res.status(status).json({ error: error.message || "Image edit failed." });
@@ -1692,6 +2061,9 @@ function inferAssetMetadata(filename = "", item = {}) {
   if (filename.startsWith("xai-edited")) return { provider: "xai", model: xaiImageModel, jobType: "image_edit" };
   if (filename.startsWith("xai-generated")) return { provider: "xai", model: xaiImageModel, jobType: "image_generation" };
   if (filename.startsWith("xai-video")) return { provider: "xai", model: xaiVideoModel, jobType: "video_generation" };
+  if (filename.startsWith("gemini-edited")) return { provider: "gemini", model: geminiEditModel, jobType: "image_edit" };
+  if (filename.startsWith("gemini-generated")) return { provider: "gemini", model: geminiImageModel, jobType: "image_generation" };
+  if (filename.startsWith("gemini-video")) return { provider: "gemini", model: geminiVideoModel, jobType: "video_generation" };
   if (filename.startsWith("openai-generated")) return { provider: "openai", model: imageModel, jobType: "image_generation" };
   if (String(item.sourceUrl || "").includes("x.ai")) return { provider: "xai", model: xaiImageModel, jobType: "image_generation" };
   return {};
@@ -1719,21 +2091,28 @@ function resolveOutputPath({ path: requestedPath, url }) {
 function hydrateBillingCost(item = {}) {
   const filename = item.filename || "";
   const inferredXai = filename.startsWith("xai-") || String(item.sourceUrl || "").includes("x.ai");
+  const inferredGemini = filename.startsWith("gemini-") || String(item.sourceUrl || "").includes("googleapis.com");
   const inferredOpenAI = filename.startsWith("openai-");
-  const provider = item.provider || (inferredXai ? "xai" : inferredOpenAI ? "openai" : "");
+  const provider = item.provider || (inferredGemini ? "gemini" : inferredXai ? "xai" : inferredOpenAI ? "openai" : "");
   const normalizedProvider = provider === "grok" ? "xai" : provider;
-  const inferredJobType = filename.includes("xai-edited") ? "image_edit" : filename.includes("xai-generated") ? "image_generation" : filename.includes("xai-video") ? "video_generation" : "";
+  const inferredJobType = filename.includes("edited") ? "image_edit" : filename.includes("generated") ? "image_generation" : filename.includes("video") ? "video_generation" : "";
   const jobType = inferredJobType || item.jobType || item.type || "";
-  const model = item.model || (normalizedProvider === "xai" ? modelForBillingJob(jobType) : "");
+  const model = item.model || (normalizedProvider === "xai" || normalizedProvider === "gemini" ? modelForBillingJob(jobType, normalizedProvider) : "");
   const existing = Number(item.costUsd || item.estimatedCostUsd || 0);
   if (existing > 0) return { ...item, provider: normalizedProvider, model: model || item.model, jobType, costUsd: Number(existing.toFixed(6)), estimatedCostUsd: Number(existing.toFixed(6)) };
-  if (normalizedProvider !== "xai" && normalizedProvider !== "grok") return { ...item, provider: normalizedProvider, costUsd: 0, estimatedCostUsd: 0 };
+  if (normalizedProvider !== "xai" && normalizedProvider !== "grok" && normalizedProvider !== "gemini") return { ...item, provider: normalizedProvider, costUsd: 0, estimatedCostUsd: 0 };
   const type = jobType.includes("measurement") ? "measurement" : jobType.includes("agent") ? "agent" : jobType.includes("video") ? "video_generation" : jobType.includes("edit") ? "image_edit" : "image_generation";
-  const costUsd = calculateAccurateCost("xai", model || xaiImageModel, item.usage || {}, type);
-  return { ...item, provider: "xai", model: model || xaiImageModel, jobType: type, costUsd, estimatedCostUsd: costUsd };
+  const costUsd = calculateAccurateCost(normalizedProvider, model || modelForBillingJob(type, normalizedProvider), item.usage || {}, type);
+  return { ...item, provider: normalizedProvider, model: model || modelForBillingJob(type, normalizedProvider), jobType: type, costUsd, estimatedCostUsd: costUsd };
 }
 
-function modelForBillingJob(jobType = "") {
+function modelForBillingJob(jobType = "", provider = "xai") {
+  if (provider === "gemini") {
+    if (jobType.includes("video")) return geminiVideoModel;
+    if (jobType.includes("measurement")) return geminiMeasurementModel;
+    if (jobType.includes("edit")) return geminiEditModel;
+    return geminiImageModel;
+  }
   if (jobType.includes("video")) return xaiVideoModel;
   if (jobType.includes("measurement")) return xaiMeasurementModel;
   if (jobType.includes("agent")) return xaiAgentModel;
@@ -1745,10 +2124,12 @@ function buildBillingTotals(manifest = []) {
   const monthItems = manifest.filter((item) => !item.createdAt || String(item.createdAt).startsWith(monthKey));
   const totalSpend = sumCosts(monthItems);
   const grokSpend = sumCosts(monthItems.filter((item) => item.provider === "xai" || item.provider === "grok"));
+  const geminiSpend = sumCosts(monthItems.filter((item) => item.provider === "gemini"));
   const openaiSpend = sumCosts(monthItems.filter((item) => item.provider === "openai"));
   return {
     totalSpend: Number(totalSpend.toFixed(6)),
     grokSpend: Number(grokSpend.toFixed(6)),
+    geminiSpend: Number(geminiSpend.toFixed(6)),
     openaiSpend: Number(openaiSpend.toFixed(6)),
     estimatedNextBill: Number((totalSpend * 1.18).toFixed(6)),
     providerSummary: summarizeManifestCosts(monthItems, "provider"),
@@ -1930,10 +2311,12 @@ async function logMinimalStylingToSupabase(events, summary) {
 }
 
 function extractMediaAssets(payload) {
-  const data = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.images) ? payload.images : [];
+  const data = Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.images) ? payload.images : Array.isArray(payload?.predictions) ? payload.predictions : [];
   const assets = data.flatMap((item) => {
     if (item?.url) return [{ url: item.url, extension: extensionFromUrl(item.url) }];
     if (item?.b64_json) return [{ bytes: Buffer.from(item.b64_json, "base64"), mimeType: "image/png" }];
+    if (item?.bytesBase64Encoded) return [{ bytes: Buffer.from(item.bytesBase64Encoded, "base64"), mimeType: item.mimeType || "image/png" }];
+    if (item?.image?.bytesBase64Encoded) return [{ bytes: Buffer.from(item.image.bytesBase64Encoded, "base64"), mimeType: item.image.mimeType || "image/png" }];
     return [];
   });
   collectNestedMedia(payload, assets);
@@ -1948,6 +2331,13 @@ function collectNestedMedia(value, assets, seen = new Set()) {
   }
   if (typeof value.b64_json === "string") {
     assets.push({ bytes: Buffer.from(value.b64_json, "base64"), mimeType: "image/png" });
+  }
+  const inline = value.inlineData || value.inline_data;
+  if (inline && typeof inline.data === "string") {
+    assets.push({ bytes: Buffer.from(inline.data, "base64"), mimeType: inline.mimeType || inline.mime_type || "image/png" });
+  }
+  if (typeof value.bytesBase64Encoded === "string") {
+    assets.push({ bytes: Buffer.from(value.bytesBase64Encoded, "base64"), mimeType: value.mimeType || "image/png" });
   }
   for (const item of Object.values(value)) {
     if (item && typeof item === "object") collectNestedMedia(item, assets, seen);

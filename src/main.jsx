@@ -68,7 +68,8 @@ const videoSizes = [
 
 const providerOptions = [
   { value: "openai", label: "OpenAI" },
-  { value: "xai", label: "Grok / xAI" }
+  { value: "xai", label: "Grok / xAI" },
+  { value: "gemini", label: "Google Gemini" }
 ];
 
 const measurementModelOptions = {
@@ -77,7 +78,8 @@ const measurementModelOptions = {
     { value: "grok-4.20-0309-reasoning", label: "Grok 4.20 Reasoning" },
     { value: "grok-4.20-0309-non-reasoning", label: "Grok 4.20 Fast" },
     { value: "grok-4.20-multi-agent-0309", label: "Grok 4.20 Multi-Agent" }
-  ]
+  ],
+  gemini: [{ value: "gemini-2.5-flash", label: "Gemini 2.5 Flash Vision" }]
 };
 
 const imageModelOptions = {
@@ -85,7 +87,8 @@ const imageModelOptions = {
   xai: [
     { value: "grok-imagine-image", label: "Grok Image" },
     { value: "grok-imagine-image-pro", label: "Grok Image Pro" }
-  ]
+  ],
+  gemini: [{ value: "imagen-3.0-generate-002", label: "Imagen 3" }]
 };
 
 const videoModelOptions = {
@@ -93,13 +96,17 @@ const videoModelOptions = {
     { value: "sora-2", label: "Sora 2" },
     { value: "sora-2-pro", label: "Sora 2 Pro" }
   ],
-  xai: [{ value: "grok-imagine-video", label: "Grok Imagine" }]
+  xai: [{ value: "grok-imagine-video", label: "Grok Imagine" }],
+  gemini: [{ value: "veo-3.1-generate-preview", label: "Veo 3.1" }]
 };
 
-const editModelOptions = [
-  { value: "grok-imagine-image", label: "Grok Image" },
-  { value: "grok-imagine-image-pro", label: "Grok Image Pro" }
-];
+const editModelOptions = {
+  xai: [
+    { value: "grok-imagine-image", label: "Grok Image" },
+    { value: "grok-imagine-image-pro", label: "Grok Image Pro" }
+  ],
+  gemini: [{ value: "gemini-2.5-flash-image", label: "Nano Banana" }]
+};
 
 const workspaceModes = [
   { id: "measure", label: "Measure", title: "Measurement Review", cta: "Ask OpenAI + measure", icon: Ruler },
@@ -111,6 +118,9 @@ const workspaceModes = [
 ];
 
 function previewActionCost(type, model = "") {
+  if (String(model || "").startsWith("veo")) return 3.2;
+  if (String(model || "").startsWith("imagen")) return 0.04;
+  if (String(model || "").includes("flash-image")) return 0.039;
   if (type === "video") return 0.25;
   if (type === "measurement") return 0.0035;
   if (type === "agent") return 0.0035;
@@ -136,6 +146,7 @@ function App() {
   const [videoSize, setVideoSize] = useState("1280x720");
   const [videoProvider, setVideoProvider] = useState("openai");
   const [videoModel, setVideoModel] = useState("sora-2");
+  const [editProvider, setEditProvider] = useState("xai");
   const [editModel, setEditModel] = useState("grok-imagine-image");
   const [editQuality, setEditQuality] = useState("high");
   const [shoppingGuide, setShoppingGuide] = useState(null);
@@ -553,6 +564,7 @@ function App() {
       measurementProvider,
       imageProvider,
       videoProvider,
+      editProvider,
       selectedModels: { measurementModel, imageModel, videoModel, editModel }
     }));
 
@@ -955,7 +967,7 @@ function App() {
     formData.append("context", JSON.stringify({
       activeMode: routeMode,
       selectedModels: { measurementModel, imageModel, videoModel, editModel },
-      selectedProviders: { measurementProvider, imageProvider, videoProvider },
+      selectedProviders: { measurementProvider, imageProvider, videoProvider, editProvider },
       activeImage: activeFile?.file?.name || null,
       editImage: editFile?.file?.name || null,
       existingResults: mediaResults.length
@@ -1006,6 +1018,12 @@ function App() {
         if (plan.mode === "measure") setMeasurementProvider("xai");
         if (plan.mode === "image") setImageProvider("xai");
         if (plan.mode === "video") setVideoProvider("xai");
+      }
+      if (plan.recommended_provider === "gemini") {
+        if (plan.mode === "measure") setMeasurementProvider("gemini");
+        if (plan.mode === "image") setImageProvider("gemini");
+        if (plan.mode === "edit") setEditProvider("gemini");
+        if (plan.mode === "video") setVideoProvider("gemini");
       }
 
       if (execution.measurement) {
@@ -1151,6 +1169,8 @@ function App() {
               setVideoProvider={setVideoProvider}
               videoModel={videoModel}
               setVideoModel={setVideoModel}
+              editProvider={editProvider}
+              setEditProvider={setEditProvider}
               editModel={editModel}
               setEditModel={setEditModel}
             />
@@ -1411,7 +1431,7 @@ function App() {
           <GeneratorCard
             icon={<Sparkles size={22} />}
             title="Edit Existing Image"
-            subtitle="Upload a photo, let OpenAI refine the edit, then apply it with the selected Grok image model"
+            subtitle="Upload a photo, let OpenAI refine the edit, then apply it with Grok or Gemini"
             prompt={editPrompt}
             setPrompt={setEditPrompt}
             primaryLabel="Ask OpenAI + edit existing image"
@@ -1454,10 +1474,19 @@ function App() {
             </button>
             <MinimalStylingStatus result={minimalStyling} isRunning={isMinimalStyling} />
             <div className="modelPicker singleProvider">
-              <span>Grok edit model</span>
+              <span>Image edit provider</span>
               <div>
+                <select value={editProvider} onChange={(event) => {
+                  const provider = event.target.value;
+                  setEditProvider(provider);
+                  setEditModel(editModelOptions[provider][0].value);
+                }}>
+                  {providerOptions.filter((option) => option.value !== "openai").map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
                 <select value={editModel} onChange={(event) => setEditModel(event.target.value)}>
-                  {editModelOptions.map((option) => (
+                  {editModelOptions[editProvider].map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
@@ -1552,6 +1581,8 @@ function TopbarModelControl({
   setVideoProvider,
   videoModel,
   setVideoModel,
+  editProvider,
+  setEditProvider,
   editModel,
   setEditModel
 }) {
@@ -1611,14 +1642,19 @@ function TopbarModelControl({
 
   if (activeMode === "edit") {
     return (
-      <label className="topSelect">
-        <span>Edit model</span>
-        <select value={editModel} onChange={(event) => setEditModel(event.target.value)}>
-          {editModelOptions.map((option) => (
-            <option key={option.value} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </label>
+      <div className="topModelPicker">
+        <ModelPicker
+          label="Edit model"
+          provider={editProvider}
+          setProvider={(provider) => {
+            setEditProvider(provider);
+            setEditModel(editModelOptions[provider][0].value);
+          }}
+          model={editModel}
+          setModel={setEditModel}
+          models={editModelOptions[editProvider]}
+        />
+      </div>
     );
   }
 
@@ -2399,8 +2435,9 @@ function BillingDashboard({ usageLog, mediaResults, files, snapshot, localBudget
 
 function BillingOverviewCards({ metrics }) {
   const cards = [
-    { label: "Total Cost", value: formatUsd(metrics.monthSpend), note: metrics.openaiOfficialAvailable ? "Grok tracked + OpenAI official" : "Logged usage this month", icon: CreditCard, tone: "gold", trend: "+ live" },
+    { label: "Total Cost", value: formatUsd(metrics.monthSpend), note: metrics.openaiOfficialAvailable ? "Tracked providers + OpenAI official" : "Logged usage this month", icon: CreditCard, tone: "gold", trend: "+ live" },
     { label: "Grok / xAI cost", value: formatUsd(metrics.grokSpend), note: "Real-time xAI pricing map", icon: Sparkles, tone: "green", trend: "accurate" },
+    { label: "Gemini cost", value: formatUsd(metrics.geminiSpend), note: "Imagen, Veo and Nano Banana", icon: Sparkles, tone: "amber", trend: "tracked" },
     { label: "OpenAI official", value: metrics.openaiOfficialAvailable ? formatUsd(metrics.openaiOfficialSpend) : "--", note: metrics.openaiOfficialMessage || "OpenAI Costs API", icon: Wand2, tone: "blue", trend: metrics.openaiOfficialAvailable ? "official" : "setup" },
     { label: "Storage Used", value: formatBytes(metrics.storageBytes), note: "Local outputs folder", icon: Database, tone: "violet", trend: `${metrics.uploads} uploads` },
     { label: "Image Generation", value: String(metrics.images), note: `${formatUsd(metrics.averageCost)} average generation`, icon: ImagePlus, tone: "amber", trend: "images" },
@@ -2525,7 +2562,8 @@ function TypePill({ type }) {
 
 function ProviderPill({ provider }) {
   const isGrok = provider === "xai" || provider === "grok" || provider === "Grok / xAI";
-  return <span className={`billingProviderPill ${isGrok ? "grok" : "openai"}`}>{isGrok ? <Sparkles size={13} /> : <Wand2 size={13} />}{isGrok ? "Grok / xAI" : provider || "OpenAI"}</span>;
+  const isGemini = provider === "gemini" || provider === "Google Gemini";
+  return <span className={`billingProviderPill ${isGemini ? "gemini" : isGrok ? "grok" : "openai"}`}>{isGemini ? <Sparkles size={13} /> : isGrok ? <Sparkles size={13} /> : <Wand2 size={13} />}{isGemini ? "Google Gemini" : isGrok ? "Grok / xAI" : provider || "OpenAI"}</span>;
 }
 
 function BillingDetailSheet({ row, onClose, onOpenLocation }) {
@@ -2542,23 +2580,27 @@ function BillingDetailSheet({ row, onClose, onOpenLocation }) {
 
 function ProviderGuide({ measurementProvider, imageProvider, videoProvider }) {
   const grokActive = measurementProvider === "xai" || imageProvider === "xai" || videoProvider === "xai";
+  const geminiActive = measurementProvider === "gemini" || imageProvider === "gemini" || videoProvider === "gemini";
   const activeModes = [
     measurementProvider === "xai" ? "Measurement" : null,
     imageProvider === "xai" ? "Image" : null,
-    videoProvider === "xai" ? "Video" : null
+    videoProvider === "xai" ? "Video" : null,
+    measurementProvider === "gemini" ? "Gemini measurement" : null,
+    imageProvider === "gemini" ? "Gemini image" : null,
+    videoProvider === "gemini" ? "Gemini video" : null
   ].filter(Boolean);
 
   return (
-    <section className={`providerGuide providerGuideCompact ${grokActive ? "grok" : ""}`}>
+    <section className={`providerGuide providerGuideCompact ${grokActive || geminiActive ? "grok" : ""}`}>
       <div>
         <span>Active AI engine</span>
-        <strong>{grokActive ? "Grok / xAI is active" : "OpenAI is active"}</strong>
+        <strong>{geminiActive ? "Gemini is active" : grokActive ? "Grok / xAI is active" : "OpenAI is active"}</strong>
       </div>
-      <p>{grokActive ? `${activeModes.join(", ")} workflows are routed through Grok where selected.` : "Measurement, image and video workflows are routed through OpenAI where selected."}</p>
+      <p>{grokActive || geminiActive ? `${activeModes.join(", ")} workflows are routed through the selected provider.` : "Measurement, image and video workflows are routed through OpenAI where selected."}</p>
       <div className="providerMiniStats">
-        <span>{measurementProvider === "xai" ? "Grok vision" : "OpenAI vision"}</span>
-        <span>{imageProvider === "xai" ? "Grok image" : "OpenAI image"}</span>
-        <span>{videoProvider === "xai" ? "Grok video" : "Sora video"}</span>
+        <span>{measurementProvider === "gemini" ? "Gemini vision" : measurementProvider === "xai" ? "Grok vision" : "OpenAI vision"}</span>
+        <span>{imageProvider === "gemini" ? "Imagen 3" : imageProvider === "xai" ? "Grok image" : "OpenAI image"}</span>
+        <span>{videoProvider === "gemini" ? "Veo 3.1" : videoProvider === "xai" ? "Grok video" : "Sora video"}</span>
       </div>
     </section>
   );
@@ -2693,6 +2735,8 @@ function manifestToMediaResult(item) {
   const model = item.model || "";
   const provider = item.provider === "xai" || item.provider === "grok" || model.toLowerCase().includes("grok")
     ? "Grok / xAI"
+    : item.provider === "gemini" || model.toLowerCase().includes("gemini") || model.toLowerCase().includes("imagen") || model.toLowerCase().includes("veo")
+      ? "Google Gemini"
     : item.provider === "openai"
       ? "OpenAI"
       : providerLabel(item.provider);
@@ -2771,7 +2815,9 @@ function displaySavedLocation(item) {
 }
 
 function providerLabel(provider) {
-  return provider === "xai" ? "Grok / xAI" : "OpenAI";
+  if (provider === "xai" || provider === "grok") return "Grok / xAI";
+  if (provider === "gemini" || provider === "google") return "Google Gemini";
+  return "OpenAI";
 }
 
 function readableIntent(intent = "") {
@@ -2891,16 +2937,17 @@ function buildBillingMetrics({ usageLog, mediaResults, files, snapshot, localBud
   const manifestUsage = (snapshot?.recentAssets || []).map(manifestToUsageItem).filter((item) => (item.dayKey || "").startsWith(monthKey));
   const hasManifestCosts = manifestUsage.some((item) => Number(item.costUsd || 0) > 0);
   const localUsage = hasManifestCosts
-    ? monthUsage.filter((item) => !["xai", "grok", "Grok / xAI"].includes(item.provider))
+    ? monthUsage.filter((item) => !["xai", "grok", "Grok / xAI", "gemini", "Google Gemini"].includes(item.provider))
     : monthUsage;
   const billingUsage = [...localUsage, ...manifestUsage];
   const grokSpend = snapshot?.totals?.grokSpend ?? billingUsage.filter((item) => ["xai", "grok", "Grok / xAI"].includes(item.provider)).reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
+  const geminiSpend = snapshot?.totals?.geminiSpend ?? billingUsage.filter((item) => ["gemini", "Google Gemini"].includes(item.provider)).reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
   const openaiLocalSpend = snapshot?.totals?.openaiSpend ?? billingUsage.filter((item) => item.provider === "openai" || item.provider === "OpenAI").reduce((sum, item) => sum + Number(item.costUsd || 0), 0);
   const openaiOfficial = snapshot?.openaiOfficial || {};
   const openaiOfficialAvailable = openaiOfficial.status === "completed" && Number.isFinite(Number(openaiOfficial.totalCostUsd));
   const openaiOfficialSpend = openaiOfficialAvailable ? Number(openaiOfficial.totalCostUsd || 0) : 0;
   const openaiSpend = openaiOfficialAvailable ? openaiOfficialSpend : openaiLocalSpend;
-  const monthSpend = grokSpend + openaiSpend;
+  const monthSpend = grokSpend + geminiSpend + openaiSpend;
   const generationItems = billingUsage.filter((item) => ["Image", "Video"].includes(item.type));
   const images = mediaResults.filter((item) => item.kind === "image").length;
   const videos = mediaResults.filter((item) => item.kind === "video").length;
@@ -2913,6 +2960,7 @@ function buildBillingMetrics({ usageLog, mediaResults, files, snapshot, localBud
     monthSpend,
     estimatedNextBill: openaiOfficialAvailable ? monthSpend * 1.18 : snapshot?.totals?.estimatedNextBill ?? monthSpend * 1.18,
     grokSpend,
+    geminiSpend,
     openaiSpend,
     openaiLocalSpend,
     openaiOfficialSpend,
@@ -3235,12 +3283,12 @@ function buildAiFitProfile(measurement, model, provider = "openai") {
 
   const confidence = measurement.confidence || "low";
   return buildProfileFromValues(values, {
-    sourceLabel: provider === "xai" ? "Grok Vision Measurement" : "OpenAI Vision Measurement",
-    confidenceLabel: provider === "xai" && measurement.confidenceScore ? `Grok Confidence: ${measurement.confidenceScore}% via ${model}` : `${confidence.toUpperCase()} confidence via ${model}`,
+    sourceLabel: provider === "gemini" ? "Gemini Vision Measurement" : provider === "xai" ? "Grok Vision Measurement" : "OpenAI Vision Measurement",
+    confidenceLabel: provider === "xai" && measurement.confidenceScore ? `Grok Confidence: ${measurement.confidenceScore}% via ${model}` : provider === "gemini" && measurement.confidenceScore ? `Gemini Confidence: ${measurement.confidenceScore}% via ${model}` : `${confidence.toUpperCase()} confidence via ${model}`,
     confidenceScore: measurement.confidenceScore,
     confidenceByField,
     globalSizes: measurement.recommendations || null,
-    notes: measurement.recommendations?.fitNotes || measurement.notes || `${provider === "xai" ? "Grok/xAI" : "OpenAI"} vision produced this approximate sizing estimate from the uploaded photo.`
+    notes: measurement.recommendations?.fitNotes || measurement.notes || `${provider === "gemini" ? "Gemini" : provider === "xai" ? "Grok/xAI" : "OpenAI"} vision produced this approximate sizing estimate from the uploaded photo.`
   });
 }
 
