@@ -9707,3 +9707,1369 @@ body {
     min-height: 420px !important;
   }
 }
+
+/* ============================================================================
+   ATELIER STUDIO - POLISHED DESIGN SYSTEM v2.0 OVERRIDES
+   Premium workspace for AI-powered fashion measurement and media generation.
+   Appended as a visual-only pass so existing React and backend logic remains intact.
+   ============================================================================ */
+
+:root {
+  --background: #faf8f4;
+  --foreground: #1c1816;
+  --surface: #fffdfb;
+  --surface-strong: #fff;
+  --card: rgba(255, 253, 250, 0.96);
+  --card-foreground: #1c1816;
+  --primary: #c9a55c;
+  --primary-hover: #b8923f;
+  --primary-foreground: #1c1816;
+  --accent: #3d9970;
+  --accent-foreground: #fff;
+  --muted: #f4f1ec;
+  --muted-foreground: #6d645b;
+  --border: rgba(38, 32, 26, 0.09);
+  --border-strong: rgba(38, 32, 26, 0.16);
+  --success: #3d9970;
+  --warning: #e09f3e;
+  --error: #d64545;
+  --info: #5b8def;
+  --openai-color: #10a37f;
+  --grok-color: #f5a623;
+  --gemini-color: #4285f4;
+  --shadow-xs: 0 1px 2px rgba(26, 22, 18, 0.04);
+  --shadow-sm: 0 2px 8px rgba(26, 22, 18, 0.05);
+  --shadow-md: 0 8px 24px rgba(26, 22, 18, 0.07);
+  --shadow-lg: 0 16px 48px rgba(26, 22, 18, 0.10);
+  --shadow-xl: 0 24px 64px rgba(26, 22, 18, 0.12);
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
+  --radius-2xl: 22px;
+  --radius-full: 9999px;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', Consolas, monospace;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --duration-fast: 120ms;
+  --duration-base: 200ms;
+  --duration-slow: 320ms;
+  --line: var(--border);
+  --ink: var(--foreground);
+  --danger: var(--error);
+}
+
+.theme-dark {
+  --background: #0f0e0d;
+  --foreground: #f5f2ed;
+  --surface: #1a1816;
+  --surface-strong: #242120;
+  --card: rgba(26, 24, 22, 0.98);
+  --card-foreground: #f5f2ed;
+  --muted: #1e1c1a;
+  --muted-foreground: #9a928a;
+  --border: rgba(255, 250, 240, 0.07);
+  --border-strong: rgba(255, 250, 240, 0.12);
+  --line: var(--border);
+  --ink: var(--foreground);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.15);
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.20);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 24px 64px rgba(0, 0, 0, 0.40);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: rgba(201, 165, 92, 0.25);
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted-foreground);
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  min-height: 100vh;
+  background:
+    linear-gradient(90deg, #12100f 0 72px, transparent 72px),
+    radial-gradient(ellipse at 15% 0%, rgba(201, 165, 92, 0.12), transparent 45%),
+    var(--background);
+}
+
+.theme-dark .app {
+  background:
+    linear-gradient(90deg, #0a0908 0 72px, transparent 72px),
+    radial-gradient(ellipse at 15% 0%, rgba(201, 165, 92, 0.06), transparent 45%),
+    var(--background);
+}
+
+.compactNav.sidebar {
+  position: fixed;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-4) var(--space-2);
+  gap: var(--space-4);
+  background: #12100f;
+  border-right: 1px solid rgba(255, 250, 240, 0.05);
+  z-index: 100;
+}
+
+.compactNav .brand {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid rgba(255, 250, 240, 0.06);
+}
+
+.compactNav .brandMark {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--primary) 0%, #a88942 100%);
+  box-shadow: 0 4px 12px rgba(201, 165, 92, 0.25);
+}
+
+.compactNav .brand h1,
+.compactNav .brand p,
+.compactNav .brand > div:not(.brandMark),
+.compactNav .sidebarFooter {
+  display: none;
+}
+
+.workspaceNav {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  padding: 0 var(--space-1);
+}
+
+.workspaceNav button {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: rgba(255, 250, 240, 0.45);
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.workspaceNav button span {
+  display: none;
+}
+
+.workspaceNav button:hover {
+  background: rgba(255, 250, 240, 0.06);
+  color: rgba(255, 250, 240, 0.75);
+}
+
+.workspaceNav button.active {
+  background: rgba(201, 165, 92, 0.12);
+  color: var(--primary);
+}
+
+.workspaceNav button.active svg {
+  filter: drop-shadow(0 0 6px rgba(201, 165, 92, 0.4));
+}
+
+.workspaceNav button:active {
+  transform: scale(0.95);
+}
+
+.navSession {
+  margin-top: auto;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  background: rgba(61, 153, 112, 0.12);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.navSession span,
+.navSession small {
+  display: none;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+  grid-template-rows: auto auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  margin-left: 72px;
+  min-height: 100vh;
+}
+
+.premiumTopbar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-5);
+  min-height: 120px;
+  padding: var(--space-4) var(--space-5);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-md);
+}
+
+.premiumTopbar > div:first-child {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.premiumTopbar h2 {
+  margin-top: var(--space-1);
+  font-size: clamp(28px, 3vw, 44px);
+  font-weight: 800;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+  overflow-wrap: break-word;
+}
+
+.premiumTopbar .compactNotice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  margin-top: var(--space-2);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: rgba(61, 153, 112, 0.10);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.premiumTopbar .compactNotice.warning {
+  background: rgba(224, 159, 62, 0.10);
+  color: var(--warning);
+}
+
+.premiumTopbar .compactNotice.error {
+  background: rgba(214, 69, 69, 0.10);
+  color: var(--error);
+}
+
+.topbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+}
+
+.topModelPicker .modelPicker,
+.topSelect {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.topModelPicker .modelPicker > span,
+.topSelect span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.topModelPicker .modelPicker div {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr;
+  gap: var(--space-1);
+}
+
+.topModelPicker select,
+.topSelect select {
+  height: 40px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color var(--duration-base) var(--ease-out);
+}
+
+.topModelPicker select:hover,
+.topSelect select:hover {
+  border-color: var(--border-strong);
+}
+
+.topbarButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 40px;
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    border-color var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.topbarButton:hover {
+  background: var(--muted);
+  border-color: var(--border-strong);
+}
+
+.topbarButton:active {
+  transform: scale(0.98);
+}
+
+.topbarButton.primary {
+  background: linear-gradient(135deg, var(--primary) 0%, #a88942 100%);
+  border-color: transparent;
+  color: #1a1614;
+  box-shadow: 0 4px 12px rgba(201, 165, 92, 0.25);
+}
+
+.topbarButton.primary:hover {
+  box-shadow: 0 6px 16px rgba(201, 165, 92, 0.35);
+  transform: translateY(-1px);
+}
+
+.topbarButton.ghost {
+  background: transparent;
+  border-color: var(--border);
+}
+
+.topbarButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.modeTabs {
+  grid-column: 1;
+  display: flex;
+  gap: var(--space-1);
+  width: fit-content;
+  padding: var(--space-1);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.modeTabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  height: 36px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    color var(--duration-base) var(--ease-out);
+}
+
+.modeTabs button:hover {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.modeTabs button.active {
+  color: #fff;
+  background: #1c1816;
+}
+
+.theme-dark .modeTabs button.active {
+  background: rgba(255, 250, 240, 0.10);
+  color: var(--foreground);
+}
+
+.previewPanel,
+.measurePanel,
+.generatorCard,
+.agentChatSection,
+.operationPanel,
+.mediaGallery,
+.providerGuide,
+.costPanel,
+.assistantRoutePanel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+  transition: box-shadow var(--duration-base) var(--ease-out);
+}
+
+.workspace > .costPanel,
+.workspace > .providerGuide,
+.workspace > .resultsStudio,
+.workspace > .assistantRoutePanel {
+  grid-column: 2;
+}
+
+.workspace > .assistantRoutePanel { grid-row: 2; }
+.workspace > .costPanel { grid-row: 3; }
+.workspace > .resultsStudio { grid-row: 4; }
+.workspace > .providerGuide { grid-row: 5; }
+
+.contentGrid,
+.generatorGrid,
+.agentChatSection {
+  grid-column: 1;
+  grid-row: 3 / span 3;
+}
+
+.mode-image .contentGrid,
+.mode-edit .contentGrid,
+.mode-video .contentGrid,
+.mode-agent .contentGrid,
+.mode-billing .contentGrid,
+.mode-measure .generatorGrid,
+.mode-agent .generatorGrid,
+.mode-billing .generatorGrid,
+.mode-measure .agentChatSection,
+.mode-image .agentChatSection,
+.mode-edit .agentChatSection,
+.mode-video .agentChatSection,
+.mode-billing .agentChatSection {
+  display: none;
+}
+
+.generatorCard {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  min-height: min(620px, calc(100vh - 200px));
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.panelHeader svg {
+  flex-shrink: 0;
+  color: var(--primary);
+}
+
+.panelHeader h3 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.panelHeader p {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.promptBox {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.promptBox span {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.promptBox textarea {
+  min-height: 200px;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 15px;
+  font-family: var(--font-sans);
+  line-height: 1.5;
+  resize: vertical;
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.promptBox textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(201, 165, 92, 0.12);
+  outline: none;
+}
+
+.promptBox textarea::placeholder {
+  color: var(--muted-foreground);
+}
+
+.advancedDetails {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+  overflow: hidden;
+}
+
+.advancedDetails summary {
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding: 0 var(--space-4);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: color var(--duration-base) var(--ease-out);
+}
+
+.advancedDetails summary:hover {
+  color: var(--foreground);
+}
+
+.advancedDetails .generatorControls {
+  display: grid;
+  gap: var(--space-3);
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.generateButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 48px;
+  padding: 0 var(--space-6);
+  border: none;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--primary) 0%, #a88942 100%);
+  color: #1a1614;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(201, 165, 92, 0.25);
+  transition:
+    box-shadow var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.generateButton:hover {
+  box-shadow: 0 6px 20px rgba(201, 165, 92, 0.35);
+  transform: translateY(-1px);
+}
+
+.generateButton:active {
+  transform: scale(0.98);
+}
+
+.generateButton:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.actionCostHint {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(201, 165, 92, 0.08);
+  color: var(--primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.costPanel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+
+.costPanel .costHero,
+.costPanel .costMetric,
+.costPanel .budgetBox,
+.costPanel .costPulse {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+
+.costPanel span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.costPanel strong {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--foreground);
+}
+
+.costPanel small {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.todayUsage,
+.usageLedger {
+  grid-column: 1 / -1;
+}
+
+.budgetGuard {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-lg);
+  background: rgba(201, 165, 92, 0.08);
+  border: 1px solid rgba(201, 165, 92, 0.15);
+}
+
+.budgetGuard > i {
+  height: 6px;
+  background: var(--border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.budgetGuard > i > b {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: var(--radius-full);
+  transition: width var(--duration-slow) var(--ease-out);
+}
+
+.billingDashboard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.billingHero,
+.billingHeroModern {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-5) var(--space-6);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-md);
+}
+
+.billingHeroModern > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.billingHeroModern span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.billingHeroModern h3 {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.billingHeroModern p {
+  font-size: 13px;
+  color: var(--muted-foreground);
+  max-width: 480px;
+}
+
+.billingHeroActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.billingHeroActions select {
+  height: 40px;
+  padding: 0 var(--space-8) 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  appearance: none;
+}
+
+.billingSecondaryButton,
+.billingPrimaryButton {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 40px;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.billingSecondaryButton {
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.billingSecondaryButton:hover {
+  background: var(--muted);
+}
+
+.billingPrimaryButton {
+  border: none;
+  background: linear-gradient(135deg, var(--primary), #a88942);
+  color: #1a1614;
+  box-shadow: 0 4px 12px rgba(201, 165, 92, 0.25);
+}
+
+.billingPrimaryButton:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(201, 165, 92, 0.35);
+}
+
+.billingOverviewCards,
+.billingOverviewModern {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-3);
+}
+
+.billingStatCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  transition:
+    border-color var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.billingStatCard:hover {
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-2px);
+}
+
+.billingStatTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.billingStatCard i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+}
+
+.billingStatCard em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.billingStatCard span {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.billingStatCard strong {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--foreground);
+}
+
+.billingStatCard small {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.billingStatCard.tone-gold i { background: rgba(201, 165, 92, 0.12); color: var(--primary); }
+.billingStatCard.tone-green i { background: rgba(61, 153, 112, 0.12); color: var(--accent); }
+.billingStatCard.tone-blue i { background: rgba(91, 141, 239, 0.12); color: var(--info); }
+.billingStatCard.tone-violet i { background: rgba(139, 92, 246, 0.12); color: #8b5cf6; }
+.billingStatCard.tone-amber i { background: rgba(224, 159, 62, 0.12); color: var(--warning); }
+.billingStatCard.tone-rose i { background: rgba(214, 69, 69, 0.12); color: var(--error); }
+.billingStatCard.tone-slate i { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+
+.billingMainGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr);
+  gap: var(--space-4);
+}
+
+.billingChart,
+.billingTrendCard,
+.providerCostCard,
+.billingMiniCard,
+.budgetStatusCard,
+.storageUsageCard,
+.billingTable,
+.billingTableModern,
+.usageFilters,
+.usageFiltersModern {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.billingChart,
+.billingTrendCard,
+.providerCostCard,
+.billingMiniCard,
+.budgetStatusCard,
+.storageUsageCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+}
+
+.billingCardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.billingCardHeader > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.billingCardHeader span,
+.billingTableHeader span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.billingCardHeader strong,
+.billingTableHeader strong {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--foreground);
+}
+
+.billingCardHeader small,
+.billingTableHeader small {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.billingBarChart {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+  height: 180px;
+  padding-top: var(--space-4);
+}
+
+.billingBarChart > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  height: 100%;
+}
+
+.billingBarChart i {
+  width: 100%;
+  max-width: 40px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: linear-gradient(180deg, var(--primary), rgba(201, 165, 92, 0.5));
+  transition:
+    background var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out);
+}
+
+.billingBarChart > div:hover i {
+  background: var(--primary);
+  box-shadow: 0 0 12px rgba(201, 165, 92, 0.4);
+}
+
+.billingBarChart b {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted-foreground);
+}
+
+.billingBarChart span {
+  font-size: 10px;
+  color: var(--muted-foreground);
+}
+
+.providerBarsModern {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.providerCostRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.providerCostTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.providerCostTitle span {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.providerCostTitle strong {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--foreground);
+}
+
+.providerCostRow > i,
+.budgetMeter {
+  height: 8px;
+  background: var(--muted);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.providerCostRow > i > b,
+.budgetMeter i {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--accent));
+  border-radius: var(--radius-full);
+  transition: width var(--duration-slow) var(--ease-out);
+}
+
+.providerCostRow small {
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.providerSummaryFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-2);
+}
+
+.providerSummaryFooter span {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.providerSummaryFooter strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.usageFilters,
+.usageFiltersModern {
+  display: grid;
+  grid-template-columns: minmax(200px, 1fr) repeat(3, minmax(140px, 180px));
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.billingSearchBox {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.billingSearchBox svg {
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.billingSearchBox input {
+  flex: 1;
+  height: 40px;
+  border: none;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.billingSearchBox input::placeholder {
+  color: var(--muted-foreground);
+}
+
+.usageFilters select,
+.usageFiltersModern select {
+  height: 40px;
+  padding: 0 var(--space-8) 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--card);
+  color: var(--foreground);
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+}
+
+.billingTable,
+.billingTableModern {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.billingTableHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+
+.billingTableScroll {
+  overflow-x: auto;
+}
+
+.billingTableModern table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.billingTableModern th,
+.billingTableModern td {
+  padding: var(--space-3) var(--space-4);
+  text-align: left;
+  font-size: 13px;
+}
+
+.billingTableModern th {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.billingTableModern tr {
+  border-bottom: 1px solid var(--border);
+  transition: background var(--duration-fast) var(--ease-out);
+}
+
+.billingTableModern tbody tr:hover {
+  background: var(--muted);
+  cursor: pointer;
+}
+
+.billingTableModern tbody tr:last-child {
+  border-bottom: none;
+}
+
+.monoCell {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.costCell {
+  font-family: var(--font-mono);
+  font-weight: 700;
+}
+
+.billingStatus {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.billingStatus.completed {
+  background: rgba(61, 153, 112, 0.12);
+  color: var(--accent);
+}
+
+.billingStatus.failed {
+  background: rgba(214, 69, 69, 0.12);
+  color: var(--error);
+}
+
+.billingStatus.queued {
+  background: rgba(224, 159, 62, 0.12);
+  color: var(--warning);
+}
+
+.billingTypePill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-full);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.billingTypePill.type-image {
+  background: rgba(91, 141, 239, 0.12);
+  color: var(--info);
+}
+
+.billingTypePill.type-video {
+  background: rgba(139, 92, 246, 0.12);
+  color: #8b5cf6;
+}
+
+.billingTypePill.type-measurement {
+  background: rgba(61, 153, 112, 0.12);
+  color: var(--accent);
+}
+
+.billingTypePill.type-agent {
+  background: rgba(201, 165, 92, 0.12);
+  color: var(--primary);
+}
+
+.mode-billing .billingDashboard::before,
+.mode-billing .billingDashboard::after,
+.mode-billing .contentGrid::before,
+.mode-billing .contentGrid::after {
+  display: none !important;
+  content: none !important;
+}
+
+@media (max-width: 1280px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .workspace > .assistantRoutePanel,
+  .workspace > .costPanel,
+  .workspace > .resultsStudio,
+  .workspace > .providerGuide,
+  .contentGrid,
+  .generatorGrid,
+  .agentChatSection {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .billingMainGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .billingOverviewCards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+
+  .compactNav.sidebar {
+    position: sticky;
+    top: 0;
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    justify-content: space-between;
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .workspaceNav {
+    flex-direction: row;
+    width: auto;
+    overflow-x: auto;
+    padding: 0;
+  }
+
+  .navSession {
+    display: none;
+  }
+
+  .workspace {
+    margin-left: 0;
+    padding: var(--space-3);
+  }
+
+  .premiumTopbar {
+    grid-template-columns: 1fr;
+  }
+
+  .topbarActions {
+    width: 100%;
+  }
+
+  .billingOverviewCards,
+  .usageFilters {
+    grid-template-columns: 1fr;
+  }
+
+  .billingHero,
+  .billingHeroModern {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .billingHeroActions {
+    flex-wrap: wrap;
+  }
+}
