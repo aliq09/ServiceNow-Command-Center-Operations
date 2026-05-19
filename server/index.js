@@ -636,7 +636,7 @@ function calculateGeminiCost(model, usage = {}, type = "") {
 
 function estimateActionCost(type = "image", model = "") {
   const normalized = String(type || "").toLowerCase();
-  if (String(model || "").startsWith("veo")) return calculateGeminiCost(model || geminiVideoModel, { seconds: 8 }, "video_generation");
+  if (String(model || "").startsWith("veo")) return calculateGeminiCost(model || geminiVideoModel, { seconds: 4 }, "video_generation");
   if (String(model || "").startsWith("imagen")) return calculateGeminiCost(model || geminiImageModel, { output_count: 1 }, "image_generation");
   if (String(model || "").includes("flash-image")) return calculateGeminiCost(model || geminiEditModel, { output_count: 1 }, "image_edit");
   if (normalized.includes("video")) return XAI_PRICING[xaiVideoModel]?.per_video || 0.25;
@@ -1163,9 +1163,16 @@ async function executeVideoTool(provider, prompt, { file, model, size = "1280x72
       { provider: "gemini", model: resolvedModel, status, jobType: "video_generation" }
     );
     if (!saved.length) {
-      await appendUsageEvent({ type: "video_generation", provider: "gemini", model: resolvedModel, status, costUsd, estimatedCostUsd: costUsd, providerResponse: `Gemini Veo operation ${video.operationName || "accepted"} is still running.` });
+      await appendVideoJobEvent({
+        provider: "gemini",
+        model: resolvedModel,
+        status,
+        job: buildVideoJob("gemini", resolvedModel, video),
+        costUsd,
+        message: `Gemini Veo operation ${video.operationName || "accepted"} is still running.`
+      });
     }
-    return { status, provider: "gemini", model: resolvedModel, saved, video, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "gemini", model: resolvedModel, costUsd, pricingSource: "local_gemini_pricing_map" } };
+    return { status, provider: "gemini", model: resolvedModel, saved, video, job: buildVideoJob("gemini", resolvedModel, video), costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "gemini", model: resolvedModel, costUsd, pricingSource: "local_gemini_pricing_map" } };
   }
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to start Grok/xAI video jobs.");
@@ -1186,16 +1193,170 @@ async function executeVideoTool(provider, prompt, { file, model, size = "1280x72
       { provider: "xai", model: resolvedModel, status, jobType: "video_generation" }
     );
     if (!saved.length) {
-      await appendUsageEvent({ type: "video_generation", provider: "xai", model: resolvedModel, status, costUsd, estimatedCostUsd: costUsd, providerResponse: "Grok video request accepted; final media URL not returned yet." });
+      await appendVideoJobEvent({
+        provider: "xai",
+        model: resolvedModel,
+        status,
+        job: buildVideoJob("xai", resolvedModel, video),
+        costUsd,
+        message: "Grok video request accepted; final media URL not returned yet."
+      });
     }
-    return { status, provider: "xai", model: resolvedModel, saved, video, costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "xai", model: resolvedModel, costUsd, pricingSource: "local_xai_pricing_map" } };
+    return { status, provider: "xai", model: resolvedModel, saved, video, job: buildVideoJob("xai", resolvedModel, video), costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "xai", model: resolvedModel, costUsd, pricingSource: "local_xai_pricing_map" } };
   }
 
   const openai = getOpenAI();
   if (!openai) throw new Error("Set OPENAI_API_KEY to start Sora video jobs.");
-  const video = await openai.videos.create({ model: resolvedModel, prompt, size, seconds });
-  const saved = await saveMediaOutputs(video, "videos", "openai-video");
-  return { status: saved.length ? "completed" : "queued", provider: "openai", model: resolvedModel, saved, video, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel) };
+  const createParams = {
+    model: resolvedModel,
+    prompt,
+    size: normalizeOpenAIVideoSize(size),
+    seconds: normalizeOpenAIVideoSeconds(seconds)
+  };
+  if (file) {
+    createParams.input_reference = { image_url: `data:${file.mimetype};base64,${file.buffer.toString("base64")}` };
+  }
+  const video = await openai.videos.create(createParams);
+  const costUsd = estimateActionCost("video", resolvedModel);
+  const ready = video.status === "completed";
+  const saved = ready ? await saveOpenAIVideoContent(video.id, resolvedModel, costUsd) : [];
+  const status = saved.length ? "completed" : video.status || "queued";
+  if (!saved.length) {
+    await appendVideoJobEvent({
+      provider: "openai",
+      model: resolvedModel,
+      status,
+      job: buildVideoJob("openai", resolvedModel, video),
+      costUsd,
+      message: `OpenAI Sora job ${video.id || "accepted"} is ${status}.`
+    });
+  }
+  return {
+    status,
+    provider: "openai",
+    model: resolvedModel,
+    saved,
+    video,
+    job: buildVideoJob("openai", resolvedModel, video),
+    costUsd,
+    costPreviewUsd: budgetGuard.estimatedCostUsd,
+    budget: await getBudgetStatus("video", resolvedModel),
+    usage: { provider: "openai", model: resolvedModel, costUsd, pricingSource: "local_video_estimate" }
+  };
+}
+
+function normalizeOpenAIVideoSize(size = "1280x720") {
+  if (size === "720x1280" || size === "1280x720") return size;
+  if (size === "1920x1080" || size === "1536x1024") return "1792x1024";
+  if (size === "1024x1536") return "1024x1792";
+  return "1280x720";
+}
+
+function normalizeOpenAIVideoSeconds(seconds = "8") {
+  const value = String(seconds);
+  return ["4", "8", "12"].includes(value) ? value : "8";
+}
+
+function buildVideoJob(provider, model, payload = {}) {
+  const providerJobId = payload.id || payload.video_id || payload.request_id || payload.requestId || payload.name || payload.operationName || payload.operation?.name || "";
+  if (!providerJobId) return null;
+  return {
+    provider,
+    model,
+    providerJobId,
+    status: payload.status || (payload.done ? "completed" : "queued"),
+    progress: payload.progress ?? null,
+    pollUrl: `/api/video-job-status?provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model || "")}&id=${encodeURIComponent(providerJobId)}`
+  };
+}
+
+async function appendVideoJobEvent({ provider, model, status, job, costUsd, message }) {
+  await appendUsageEvent({
+    type: "video_generation",
+    provider,
+    model,
+    status,
+    costUsd: status === "completed" ? costUsd : 0,
+    estimatedCostUsd: costUsd,
+    providerJobId: job?.providerJobId || "",
+    pollUrl: job?.pollUrl || "",
+    providerResponse: message
+  });
+}
+
+async function saveOpenAIVideoContent(videoId, model, costUsd = 0) {
+  if (!videoId) return [];
+  const openai = getOpenAI();
+  if (!openai) throw new Error("Set OPENAI_API_KEY to download Sora video output.");
+  const response = await openai.videos.downloadContent(videoId, { variant: "video" });
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return attachCostToSaved(
+    await saveRawMediaOutput(bytes, "videos", "openai-video", "mp4", { provider: "openai", model, costUsd, estimatedCostUsd: costUsd, status: "completed", jobType: "video_generation", providerJobId: videoId }),
+    costUsd,
+    { provider: "openai", model, status: "completed", jobType: "video_generation", providerJobId: videoId }
+  );
+}
+
+async function pollVideoProviderJob({ provider, model, id }) {
+  if (!provider || !id) throw new Error("Provider and video job id are required.");
+  const resolvedModel = model || (provider === "gemini" ? geminiVideoModel : provider === "xai" ? xaiVideoModel : "sora-2");
+  const costUsd = estimateActionCost("video", resolvedModel);
+  const existingSaved = await findSavedVideoForJob(id);
+  if (existingSaved.length) {
+    return {
+      status: "completed",
+      provider,
+      model: resolvedModel,
+      saved: existingSaved,
+      video: { status: "completed", providerJobId: id },
+      job: buildVideoJob(provider, resolvedModel, { id, status: "completed", progress: 100 }),
+      costUsd
+    };
+  }
+
+  if (provider === "openai") {
+    const openai = getOpenAI();
+    if (!openai) throw new Error("Set OPENAI_API_KEY to check Sora video jobs.");
+    const video = await openai.videos.retrieve(id);
+    if (video.status === "failed") throw new Error(video.error?.message || "OpenAI Sora video job failed.");
+    const saved = video.status === "completed" ? await saveOpenAIVideoContent(id, resolvedModel, costUsd) : [];
+    return { status: saved.length ? "completed" : video.status || "queued", provider, model: resolvedModel, saved, video, job: buildVideoJob(provider, resolvedModel, video), costUsd };
+  }
+
+  if (provider === "gemini") {
+    const operation = await getGeminiOperation(id);
+    const status = operation.done ? "completed" : "queued";
+    const saved = status === "completed"
+      ? attachCostToSaved(
+          await saveMediaOutputs(operation, "videos", "gemini-video", { provider: "gemini", model: resolvedModel, costUsd, estimatedCostUsd: costUsd, status, jobType: "video_generation", providerJobId: id }),
+          costUsd,
+          { provider: "gemini", model: resolvedModel, status, jobType: "video_generation", providerJobId: id }
+        )
+      : [];
+    return { status: saved.length ? "completed" : status, provider, model: resolvedModel, saved, video: operation, job: buildVideoJob(provider, resolvedModel, { ...operation, operationName: id }), costUsd };
+  }
+
+  if (provider === "xai") {
+    const video = await pollXaiVideoJob(id);
+    const status = extractMediaAssets(video).length ? "completed" : video.status || "queued";
+    const saved = status === "completed"
+      ? attachCostToSaved(
+          await saveMediaOutputs(video, "videos", "xai-video", { provider: "xai", model: resolvedModel, costUsd, estimatedCostUsd: costUsd, status, jobType: "video_generation", providerJobId: id }),
+          costUsd,
+          { provider: "xai", model: resolvedModel, status, jobType: "video_generation", providerJobId: id }
+        )
+      : [];
+    return { status: saved.length ? "completed" : status, provider, model: resolvedModel, saved, video, job: buildVideoJob(provider, resolvedModel, { ...video, id }), costUsd };
+  }
+
+  throw new Error(`Unsupported video provider: ${provider}`);
+}
+
+async function findSavedVideoForJob(providerJobId) {
+  const manifest = await readOutputManifest();
+  return manifest
+    .filter((item) => item.providerJobId === providerJobId && (item.type === "videos" || String(item.jobType || "").includes("video")))
+    .map(repairManifestAsset);
 }
 
 function parseJsonObject(text) {
@@ -1263,7 +1424,7 @@ async function geminiGenerateVideo({ prompt, file, model = geminiVideoModel, siz
     instances: [instance],
     parameters: {
       aspectRatio: mapSizeToAspectRatio(size),
-      durationSeconds: Math.min(15, Math.max(1, Number(seconds) || 8)),
+      durationSeconds: Math.min(8, Math.max(4, Number(seconds) || 8)),
       sampleCount: 1
     }
   });
@@ -1276,10 +1437,33 @@ async function pollGeminiOperation(operationName, attempts = 3, delayMs = 4500) 
   let current = null;
   for (let index = 0; index < attempts; index += 1) {
     await new Promise((resolve) => setTimeout(resolve, delayMs));
-    current = await geminiFetch(operationName.replace(/^\/?v1beta\//, ""), null, { method: "GET" });
+    current = await getGeminiOperation(operationName);
     if (current.done) return current;
   }
   return current || { name: operationName, done: false };
+}
+
+async function getGeminiOperation(operationName) {
+  return geminiFetch(String(operationName).replace(/^\/?v1beta\//, ""), null, { method: "GET" });
+}
+
+async function pollXaiVideoJob(jobId) {
+  if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to check Grok video jobs.");
+  const candidates = [
+    `https://api.x.ai/v1/videos/generations/${encodeURIComponent(jobId)}`,
+    `https://api.x.ai/v1/videos/${encodeURIComponent(jobId)}`
+  ];
+  let lastMessage = "";
+  for (const url of candidates) {
+    const response = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${process.env.XAI_API_KEY}`, "Content-Type": "application/json" }
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) return payload;
+    lastMessage = payload?.error?.message || `Grok video status request failed with ${response.status}.`;
+  }
+  throw new Error(lastMessage || "Grok video status is unavailable for this job.");
 }
 
 function providerAvailable(provider) {
@@ -1902,6 +2086,20 @@ app.post("/api/generate/video", upload.single("reference"), async (req, res) => 
   }
 });
 
+app.get("/api/video-job-status", async (req, res) => {
+  const { provider, model, id } = req.query || {};
+  try {
+    const result = await pollVideoProviderJob({ provider: String(provider || ""), model: String(model || ""), id: String(id || "") });
+    res.json({
+      ...result,
+      budget: await getBudgetStatus("video", result.model),
+      usage: { provider: result.provider, model: result.model, costUsd: result.costUsd || 0, pricingSource: result.provider === "gemini" ? "local_gemini_pricing_map" : result.provider === "xai" ? "local_xai_pricing_map" : "local_video_estimate" }
+    });
+  } catch (error) {
+    res.status(statusForError(error)).json({ error: error.message || "Video job status failed." });
+  }
+});
+
 app.post("/api/analyze/image", upload.single("reference"), async (req, res) => {
   const { provider = "openai", model } = req.body || {};
   if (!req.file) return res.status(400).json({ error: "A reference image is required for analysis." });
@@ -1983,6 +2181,17 @@ async function saveMediaOutputs(payload, folder, prefix, metadata = {}) {
     saved.push({ filename, path: filePath, url: `/outputs/${folder}/${filename}`, sourceUrl: asset.url || null, ...metadata });
   }
 
+  await appendManifest(saved.map((item) => ({ ...item, type: folder, createdAt: new Date().toISOString() })));
+  return saved;
+}
+
+async function saveRawMediaOutput(bytes, folder, prefix, extension = "bin", metadata = {}) {
+  const targetDir = path.join(outputRoot, folder);
+  await fs.mkdir(targetDir, { recursive: true });
+  const filename = `${prefix}-${Date.now()}-1.${extension}`;
+  const filePath = path.join(targetDir, filename);
+  await fs.writeFile(filePath, bytes);
+  const saved = [{ filename, path: filePath, url: `/outputs/${folder}/${filename}`, sourceUrl: null, ...metadata }];
   await appendManifest(saved.map((item) => ({ ...item, type: folder, createdAt: new Date().toISOString() })));
   return saved;
 }
@@ -2098,7 +2307,12 @@ function hydrateBillingCost(item = {}) {
   const inferredJobType = filename.includes("edited") ? "image_edit" : filename.includes("generated") ? "image_generation" : filename.includes("video") ? "video_generation" : "";
   const jobType = inferredJobType || item.jobType || item.type || "";
   const model = item.model || (normalizedProvider === "xai" || normalizedProvider === "gemini" ? modelForBillingJob(jobType, normalizedProvider) : "");
-  const existing = Number(item.costUsd || item.estimatedCostUsd || 0);
+  const status = String(item.status || "").toLowerCase();
+  const estimated = Number(item.estimatedCostUsd || 0);
+  if (status && status !== "completed") {
+    return { ...item, provider: normalizedProvider, model: model || item.model, jobType, costUsd: 0, estimatedCostUsd: Number(estimated.toFixed(6)) };
+  }
+  const existing = Number(item.costUsd || 0);
   if (existing > 0) return { ...item, provider: normalizedProvider, model: model || item.model, jobType, costUsd: Number(existing.toFixed(6)), estimatedCostUsd: Number(existing.toFixed(6)) };
   if (normalizedProvider !== "xai" && normalizedProvider !== "grok" && normalizedProvider !== "gemini") return { ...item, provider: normalizedProvider, costUsd: 0, estimatedCostUsd: 0 };
   const type = jobType.includes("measurement") ? "measurement" : jobType.includes("agent") ? "agent" : jobType.includes("video") ? "video_generation" : jobType.includes("edit") ? "image_edit" : "image_generation";

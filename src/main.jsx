@@ -118,7 +118,7 @@ const workspaceModes = [
 ];
 
 function previewActionCost(type, model = "") {
-  if (String(model || "").startsWith("veo")) return 3.2;
+  if (String(model || "").startsWith("veo")) return 1.6;
   if (String(model || "").startsWith("imagen")) return 0.04;
   if (String(model || "").includes("flash-image")) return 0.039;
   if (type === "video") return 0.25;
@@ -360,7 +360,7 @@ function App() {
       formData.append("model", videoModel);
       formData.append("quality", videoQuality);
       formData.append("size", videoSize);
-      formData.append("seconds", "8");
+      formData.append("seconds", videoProvider === "gemini" ? "4" : "8");
       await appendReferenceToFormData(formData, activeFile || agentReference);
     }
 
@@ -417,12 +417,105 @@ function App() {
       ].slice(0, 16));
       refreshBillingSnapshot();
       setNotice({ tone: "success", text: compactMessage(result.message || (type === "image" ? "Image generation completed." : "Video job queued.")) });
+      if (type === "video" && result.status === "queued" && result.job?.pollUrl) {
+        pollQueuedVideoJob(result.job, result.provider || provider, result.model || model);
+      }
     } catch (error) {
       setOperation({ type: type === "image" ? "Image generation" : "Video generation", provider: providerLabel(provider), model, status: "failed", step: 1, message: compactMessage(error.message) });
       setProgressOverlay({ type: type === "image" ? "Image generation" : "Video generation", provider: providerLabel(provider), label: "Failed", progress: 100, quality: type === "image" ? imageQuality.toUpperCase() : "Video", failed: true });
       setTimeout(() => setProgressOverlay(null), 1600);
       setNotice({ tone: "warning", text: compactMessage(error.message) });
     }
+  };
+
+  const pollQueuedVideoJob = async (job, provider, model) => {
+    const pollUrl = job?.pollUrl;
+    if (!pollUrl) return;
+    setOperation({
+      type: "Video generation",
+      provider: providerLabel(provider),
+      model,
+      status: "queued",
+      step: 2,
+      message: "Provider accepted the video job. Checking for the final MP4."
+    });
+    setProgressOverlay({
+      type: "Video generation",
+      provider: providerLabel(provider),
+      label: "Rendering",
+      progress: Math.max(35, Number(job.progress || 35)),
+      quality: videoSize.includes("720") ? "720p" : "1080p",
+      cancellable: true
+    });
+
+    for (let attempt = 1; attempt <= 36; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, attempt < 4 ? 5000 : 10000));
+      try {
+        const response = await fetch(pollUrl);
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Video status check failed.");
+        const progress = Math.max(40, Math.min(92, Number(result.video?.progress ?? result.job?.progress ?? 40 + attempt * 3)));
+        const saved = normalizeSavedMedia(result.saved, "video", result.provider || provider, result.model || model);
+
+        if (saved.length || result.status === "completed") {
+          if (saved.length) setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
+          setOperation({
+            type: "Video generation",
+            provider: providerLabel(result.provider || provider),
+            model: result.model || model,
+            status: saved.length ? "completed" : "completed",
+            step: saved.length ? 3 : 2,
+            message: saved.length ? "Video received and saved locally." : "Video completed, but no downloadable media was returned."
+          });
+          setProgressOverlay({
+            type: "Video generation",
+            provider: providerLabel(result.provider || provider),
+            label: saved.length ? "Completed" : "Completed",
+            progress: 100,
+            quality: videoSize.includes("720") ? "720p" : "1080p",
+            done: Boolean(saved.length)
+          });
+          setTimeout(() => setProgressOverlay(null), 1600);
+          setNotice({ tone: saved.length ? "success" : "warning", text: saved.length ? "Video completed and saved locally." : "Video completed but no file was returned to save." });
+          refreshBillingSnapshot();
+          return;
+        }
+
+        setOperation({
+          type: "Video generation",
+          provider: providerLabel(result.provider || provider),
+          model: result.model || model,
+          status: result.status || "queued",
+          step: 2,
+          message: "Video is still rendering with the provider."
+        });
+        setProgressOverlay((current) => current ? { ...current, label: "Rendering", progress } : current);
+      } catch (error) {
+        setOperation({
+          type: "Video generation",
+          provider: providerLabel(provider),
+          model,
+          status: "failed",
+          step: 2,
+          message: compactMessage(error.message)
+        });
+        setProgressOverlay({ type: "Video generation", provider: providerLabel(provider), label: "Status check failed", progress: 100, quality: "Video", failed: true });
+        setTimeout(() => setProgressOverlay(null), 1600);
+        setNotice({ tone: "warning", text: compactMessage(error.message) });
+        return;
+      }
+    }
+
+    setOperation({
+      type: "Video generation",
+      provider: providerLabel(provider),
+      model,
+      status: "queued",
+      step: 2,
+      message: "Video is still rendering. Use returned media refresh later to pick up the saved file."
+    });
+    setProgressOverlay(null);
+    setNotice({ tone: "progress", text: "Video job is still rendering with the provider." });
   };
 
   const callImageEdit = async () => {
@@ -963,7 +1056,7 @@ function App() {
     formData.append("execute", "true");
     formData.append("quality", routeMode === "edit" ? editQuality : imageQuality);
     formData.append("size", routeMode === "video" ? videoSize : imageSize);
-    formData.append("seconds", "8");
+    formData.append("seconds", routeMode === "video" && videoProvider === "gemini" ? "4" : "8");
     formData.append("context", JSON.stringify({
       activeMode: routeMode,
       selectedModels: { measurementModel, imageModel, videoModel, editModel },
@@ -1072,6 +1165,9 @@ function App() {
         message: plan.user_visible_explanation || "OpenAI routed the workflow."
       });
       setNotice({ tone: "success", text: compactMessage(plan.user_visible_explanation || "OpenAI orchestration completed.") });
+      if (plan.mode === "video" && execution.status === "queued" && execution.job?.pollUrl) {
+        pollQueuedVideoJob(execution.job, execution.provider || plan.recommended_provider, execution.model || plan.recommended_model);
+      }
     } catch (error) {
       const messageText = error.name === "AbortError" ? "AI routing timed out. No charge is shown in this app unless a provider returned a result." : compactMessage(error.message);
       setOperation({ type: "OpenAI orchestration", provider: "OpenAI", model: "router", status: "failed", step: 1, message: messageText });
