@@ -11073,3 +11073,514 @@ body {
     flex-wrap: wrap;
   }
 }
+
+/* ============================================================================
+   PHASE 2 CREATIVE STUDIO FEATURES
+   Projects, prompt library, model recommendation, compare mode and smart results.
+   ============================================================================ */
+
+.phase2StudioBar {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(280px, 420px) 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.projectSwitcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.projectSwitcherLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 150px;
+}
+
+.projectSwitcherLabel svg {
+  color: var(--primary);
+}
+
+.projectSwitcherLabel span,
+.projectContextStats span,
+.recentProjects button,
+.modelRecommendationCard span,
+.promptDrawerHeader span,
+.variantCompareHeader span {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+}
+
+.projectSwitcherLabel strong {
+  display: block;
+  max-width: 180px;
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projectSwitcher select,
+.projectSwitcher button,
+.phase2StudioBar select {
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.projectSwitcher select {
+  min-width: 180px;
+  padding: 0 var(--space-3);
+}
+
+.projectSwitcher button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  cursor: pointer;
+}
+
+.projectContextStats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.projectContextStats span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  color: var(--muted-foreground);
+}
+
+.recentProjects {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  overflow: hidden;
+}
+
+.recentProjects button {
+  min-height: 30px;
+  max-width: 120px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.recentProjects button.active,
+.recentProjects button:hover {
+  background: rgba(201, 165, 92, 0.12);
+  border-color: rgba(201, 165, 92, 0.28);
+  color: var(--primary);
+}
+
+.modelRecommendationCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid rgba(61, 153, 112, 0.18);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(61, 153, 112, 0.12), rgba(201, 165, 92, 0.08));
+}
+
+.modelRecommendationCard div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modelRecommendationCard strong {
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+.modelRecommendationCard small {
+  color: var(--muted-foreground);
+  font-size: 12px;
+}
+
+.modelRecommendationCard button,
+.promptBox span button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.promptBox > span {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.promptBox > span > button:first-of-type {
+  margin-left: auto;
+}
+
+.outputFilters {
+  display: grid;
+  grid-template-columns: minmax(140px, 1fr) minmax(110px, 140px) minmax(110px, 140px);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+
+.outputFilters label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+}
+
+.outputFilters input,
+.outputFilters select {
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 700;
+  outline: none;
+}
+
+.variantComparePanel {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid rgba(91, 141, 239, 0.18);
+  border-radius: var(--radius-lg);
+  background: rgba(91, 141, 239, 0.08);
+}
+
+.variantCompareHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.variantCompareHeader strong {
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+.variantCompareHeader button {
+  min-height: 30px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.variantCompareGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.variantCompareGrid button {
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  padding: var(--space-2);
+  cursor: pointer;
+  text-align: left;
+}
+
+.variantCompareGrid img,
+.variantCompareGrid video {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+}
+
+.variantCompareGrid span {
+  color: var(--foreground);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.resultActionRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.resultActionRow .openLocationButton {
+  min-height: 34px;
+}
+
+.mediaHistoryItem {
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  min-width: 128px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.mediaHistoryItem.active {
+  border-color: rgba(201, 165, 92, 0.45);
+}
+
+.mediaThumbOpen {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mediaThumbOpen strong,
+.mediaThumbOpen small {
+  padding: 0 var(--space-2);
+}
+
+.mediaThumbOpen small {
+  padding-bottom: var(--space-2);
+}
+
+.mediaThumbActions {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.mediaHistoryItem:hover .mediaThumbActions {
+  opacity: 1;
+}
+
+.mediaThumbActions button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid rgba(255, 250, 240, 0.22);
+  border-radius: var(--radius-full);
+  background: rgba(18, 16, 15, 0.72);
+  color: #fff;
+  cursor: pointer;
+}
+
+.promptDrawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(18, 16, 15, 0.42);
+  backdrop-filter: blur(8px);
+}
+
+.promptLibraryDrawer {
+  width: min(520px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--card);
+  border-left: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+}
+
+.promptDrawerHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.promptDrawerHeader strong {
+  display: block;
+  margin-top: 2px;
+  color: var(--foreground);
+  font-size: 20px;
+}
+
+.promptDrawerHeader button,
+.promptLibraryActions button {
+  min-height: 34px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: var(--surface);
+  color: var(--foreground);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.promptLibraryFilters {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px;
+  gap: var(--space-2);
+}
+
+.promptLibraryFilters label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--muted);
+}
+
+.promptLibraryFilters input,
+.promptLibraryFilters select {
+  width: 100%;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+  color: var(--foreground);
+  outline: none;
+}
+
+.promptLibraryList {
+  display: grid;
+  gap: var(--space-3);
+  overflow: auto;
+  padding-right: var(--space-1);
+}
+
+.promptLibraryItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.promptLibraryItem span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.promptLibraryItem strong {
+  display: block;
+  margin-top: 4px;
+  color: var(--foreground);
+  font-size: 15px;
+}
+
+.promptLibraryItem p {
+  margin-top: 6px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.promptLibraryItem em {
+  display: inline-flex;
+  margin: var(--space-2) 4px 0 0;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.promptLibraryActions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.promptLibraryEmpty {
+  display: grid;
+  place-items: center;
+  gap: var(--space-2);
+  min-height: 220px;
+  padding: var(--space-6);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-xl);
+  color: var(--muted-foreground);
+  text-align: center;
+}
+
+@media (max-width: 1280px) {
+  .phase2StudioBar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .outputFilters,
+  .promptLibraryFilters,
+  .variantCompareGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .projectSwitcher {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

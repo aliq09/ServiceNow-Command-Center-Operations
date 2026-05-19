@@ -9,16 +9,23 @@ import {
   CreditCard,
   Database,
   Download,
+  Filter,
   FolderOpen,
+  FolderKanban,
+  GitCompare,
   ImagePlus,
+  Layers,
   Moon,
+  Plus,
   RefreshCw,
   Search,
+  Star,
   Sun,
   Shirt,
   Ruler,
   ScanLine,
   Sparkles,
+  Tag,
   Upload,
   Wand2
 } from "lucide-react";
@@ -117,6 +124,33 @@ const workspaceModes = [
   { id: "billing", label: "Billing", title: "Billing Intelligence", cta: "Refresh billing", icon: CreditCard }
 ];
 
+const defaultProjectId = "atelier-default";
+
+const defaultProjects = [
+  {
+    id: defaultProjectId,
+    name: "Main Studio",
+    description: "Default workspace for measurements, image edits, generated media and video tests.",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  }
+];
+
+const outputTypeOptions = [
+  { value: "all", label: "All outputs" },
+  { value: "image", label: "Images" },
+  { value: "video", label: "Videos" },
+  { value: "edited", label: "Edited" },
+  { value: "favorite", label: "Favorites" }
+];
+
+const providerFilterOptions = [
+  { value: "all", label: "All providers" },
+  { value: "openai", label: "OpenAI" },
+  { value: "xai", label: "Grok / xAI" },
+  { value: "gemini", label: "Gemini" }
+];
+
 function previewActionCost(type, model = "") {
   if (String(model || "").startsWith("veo")) return 1.6;
   if (String(model || "").startsWith("imagen")) return 0.04;
@@ -199,6 +233,12 @@ function App() {
   const [selectedBillingRow, setSelectedBillingRow] = useState(null);
   const [theme, setTheme] = useState(() => localStorage.getItem("atelierTheme") || "light");
   const [commandOpen, setCommandOpen] = useState(false);
+  const [projects, setProjects] = useState(() => loadStoredArray("atelierProjects", defaultProjects));
+  const [activeProjectId, setActiveProjectId] = useState(() => localStorage.getItem("atelierActiveProjectId") || defaultProjectId);
+  const [promptLibrary, setPromptLibrary] = useState(() => loadStoredArray("atelierPromptLibrary", seedPromptLibrary()));
+  const [promptLibraryOpen, setPromptLibraryOpen] = useState(false);
+  const [outputFilters, setOutputFilters] = useState({ query: "", provider: "all", type: "all" });
+  const [compareItems, setCompareItems] = useState([]);
   const [imagePrompt, setImagePrompt] = useState("Luxury fashion model full-body editorial image, neutral studio background, accurate garment proportions, premium catalog lighting.");
   const [videoPrompt, setVideoPrompt] = useState("Fashion model turns slowly for a fit-review walk cycle, clean studio lighting, realistic fabric movement, professional campaign style.");
   const [editPrompt, setEditPrompt] = useState("Enhance this fashion model image with premium editorial lighting, keep the body proportions and garment shape consistent, clean background distractions, preserve realistic skin and fabric detail.");
@@ -211,6 +251,33 @@ function App() {
   const agentCost = useMemo(() => buildAgentCostStats(usageLog), [usageLog]);
   const budgetStatus = billingSnapshot?.budget || null;
   const videoBudgetBlocked = Boolean(budgetStatus?.videoDisabled || Number(budgetStatus?.remainingUsd ?? 5) < previewActionCost("video", videoModel));
+  const activeProject = useMemo(
+    () => projects.find((project) => project.id === activeProjectId) || projects[0] || defaultProjects[0],
+    [projects, activeProjectId]
+  );
+  const projectMediaResults = useMemo(
+    () => sortMediaResults(mediaResults.filter((item) => mediaBelongsToProject(item, activeProject?.id || defaultProjectId))),
+    [mediaResults, activeProject]
+  );
+  const filteredProjectMedia = useMemo(
+    () => filterMediaResults(projectMediaResults, outputFilters),
+    [projectMediaResults, outputFilters]
+  );
+  const currentPrompt = activeMode === "edit" ? editPrompt : activeMode === "video" ? videoPrompt : imagePrompt;
+  const currentRecommendation = useMemo(
+    () => buildModelRecommendation(activeMode, {
+      measurementProvider,
+      measurementModel,
+      imageProvider,
+      imageModel,
+      editProvider,
+      editModel,
+      videoProvider,
+      videoModel,
+      hasImage: Boolean(activeFile || editFile || agentReference)
+    }),
+    [activeMode, measurementProvider, measurementModel, imageProvider, imageModel, editProvider, editModel, videoProvider, videoModel, activeFile, editFile, agentReference]
+  );
 
   useEffect(() => {
     try {
@@ -231,6 +298,18 @@ function App() {
   useEffect(() => {
     localStorage.setItem("atelierMediaResults", JSON.stringify(mediaResults));
   }, [mediaResults]);
+
+  useEffect(() => {
+    localStorage.setItem("atelierProjects", JSON.stringify(projects));
+  }, [projects]);
+
+  useEffect(() => {
+    localStorage.setItem("atelierActiveProjectId", activeProjectId);
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    localStorage.setItem("atelierPromptLibrary", JSON.stringify(promptLibrary));
+  }, [promptLibrary]);
 
   useEffect(() => {
     refreshBillingSnapshot();
@@ -273,6 +352,154 @@ function App() {
     setFitProfile(buildDraftFitProfile(item));
     setWorkflowState("uploaded");
     if (shouldMeasure) requestMeasurement(item);
+  };
+
+  const touchActiveProject = () => {
+    setProjects((current) => current.map((project) => (
+      project.id === activeProject.id ? { ...project, updatedAt: new Date().toISOString() } : project
+    )));
+  };
+
+  const createProject = () => {
+    const name = window.prompt("Project name", "New fashion concept");
+    if (!name?.trim()) return;
+    const now = new Date().toISOString();
+    const project = {
+      id: `project-${crypto.randomUUID()}`,
+      name: name.trim(),
+      description: "Creative workspace for related measurements, prompts and generated outputs.",
+      createdAt: now,
+      updatedAt: now
+    };
+    setProjects((current) => [project, ...current]);
+    setActiveProjectId(project.id);
+    setNotice({ tone: "success", text: `Project created · ${project.name}` });
+  };
+
+  const saveCurrentPrompt = () => {
+    if (!currentPrompt.trim()) {
+      setNotice({ tone: "warning", text: "Add a prompt before saving it to the library." });
+      return;
+    }
+    const now = new Date().toISOString();
+    const promptItem = {
+      id: `prompt-${crypto.randomUUID()}`,
+      title: promptTitle(currentPrompt),
+      prompt: currentPrompt.trim(),
+      negativePrompt: "",
+      tags: inferPromptTags(currentPrompt, activeMode),
+      type: activeMode === "edit" ? "edit" : activeMode === "video" ? "video" : "image",
+      providerCompatibility: compatibleProvidersForMode(activeMode),
+      favorite: true,
+      projectId: activeProject.id,
+      createdAt: now
+    };
+    setPromptLibrary((current) => [promptItem, ...current].slice(0, 80));
+    setNotice({ tone: "success", text: "Prompt saved to library." });
+  };
+
+  const applyPromptFromLibrary = (promptItem) => {
+    if (!promptItem?.prompt) return;
+    if (activeMode === "video" || promptItem.type === "video") {
+      setVideoPrompt(promptItem.prompt);
+      setActiveMode("video");
+    } else if (activeMode === "edit" || promptItem.type === "edit") {
+      setEditPrompt(promptItem.prompt);
+      setActiveMode("edit");
+    } else {
+      setImagePrompt(promptItem.prompt);
+      setActiveMode("image");
+    }
+    setPromptLibraryOpen(false);
+    setNotice({ tone: "success", text: `Prompt inserted · ${promptItem.title}` });
+  };
+
+  const togglePromptFavorite = (promptId) => {
+    setPromptLibrary((current) => current.map((prompt) => prompt.id === promptId ? { ...prompt, favorite: !prompt.favorite } : prompt));
+  };
+
+  const enhanceSavedMedia = (saved, context = {}) => {
+    const parentJobId = context.parentJobId || `job-${Date.now()}`;
+    return saved.map((item, index) => ({
+      ...item,
+      projectId: activeProject.id,
+      projectName: activeProject.name,
+      parentJobId,
+      variantIndex: index + 1,
+      prompt: context.prompt || currentPrompt,
+      sourceMode: context.mode || activeMode,
+      resultType: context.resultType || item.label,
+      isFavorite: Boolean(item.isFavorite)
+    }));
+  };
+
+  const updateMediaItem = (id, updater) => {
+    setMediaResults((current) => current.map((item) => item.id === id ? updater(item) : item));
+  };
+
+  const toggleMediaFavorite = (item) => {
+    updateMediaItem(item.id, (current) => ({ ...current, isFavorite: !current.isFavorite }));
+  };
+
+  const reuseResultPrompt = (item) => {
+    if (!item?.prompt) {
+      setNotice({ tone: "warning", text: "This result does not include a reusable prompt." });
+      return;
+    }
+    if (item.kind === "video" || item.sourceMode === "video") {
+      setVideoPrompt(item.prompt);
+      setActiveMode("video");
+    } else if (item.label?.toLowerCase().includes("edit") || item.sourceMode === "edit") {
+      setEditPrompt(item.prompt);
+      setActiveMode("edit");
+    } else {
+      setImagePrompt(item.prompt);
+      setActiveMode("image");
+    }
+    setNotice({ tone: "success", text: "Prompt reused from saved result." });
+  };
+
+  const generateSimilarFromResult = (item) => {
+    const basePrompt = item?.prompt || "Create a similar premium fashion editorial image with the same visual direction.";
+    setImagePrompt(`${basePrompt}\n\nCreate a close visual variant with a fresh pose, refined styling, and consistent fashion editorial quality.`);
+    setImageProvider(providerValueFromLabel(item?.provider) || imageProvider);
+    setActiveMode("image");
+    setNotice({ tone: "progress", text: "Similar-generation prompt prepared." });
+  };
+
+  const animateResultToVideo = (item) => {
+    if (!item) return;
+    setAgentReference(item);
+    setVideoPrompt(`Animate this saved fashion result into a smooth model turn/walk cycle. Keep the subject, outfit, styling, and lighting consistent. Cinematic camera movement, realistic fabric motion, no text or logos.`);
+    setVideoProvider("gemini");
+    setVideoModel(videoModelOptions.gemini[0].value);
+    setActiveMode("video");
+    setNotice({ tone: "progress", text: "Image-to-video setup prepared with Gemini Veo." });
+  };
+
+  const toggleCompareItem = (item) => {
+    setCompareItems((current) => {
+      if (current.some((entry) => entry.id === item.id)) return current.filter((entry) => entry.id !== item.id);
+      return [item, ...current].slice(0, 4);
+    });
+  };
+
+  const applyRecommendation = (recommendation = currentRecommendation) => {
+    if (!recommendation?.provider) return;
+    if (activeMode === "measure") {
+      setMeasurementProvider(recommendation.provider);
+      setMeasurementModel(recommendation.model);
+    } else if (activeMode === "image") {
+      setImageProvider(recommendation.provider);
+      setImageModel(recommendation.model);
+    } else if (activeMode === "edit") {
+      setEditProvider(recommendation.provider === "openai" ? "xai" : recommendation.provider);
+      setEditModel(recommendation.model);
+    } else if (activeMode === "video") {
+      setVideoProvider(recommendation.provider);
+      setVideoModel(recommendation.model);
+    }
+    setNotice({ tone: "success", text: `Recommended model applied · ${recommendation.providerLabel}` });
   };
 
   const requestMeasurement = async (item, forcedProvider = measurementProvider) => {
@@ -381,9 +608,13 @@ function App() {
       const response = await fetch(endpoint, { method: "POST", body: formData });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Request failed.");
-      const saved = normalizeSavedMedia(result.saved, type, result.provider || provider, result.model || model);
+      const saved = enhanceSavedMedia(
+        normalizeSavedMedia(result.saved, type, result.provider || provider, result.model || model),
+        { prompt, mode: type, resultType: type === "video" ? "Generated video" : "Generated image" }
+      );
       if (saved.length) {
         setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
+        touchActiveProject();
         if (type === "image") {
           setAgentReference(saved[0]);
           setAgentFile(null);
@@ -455,10 +686,14 @@ function App() {
         const result = await response.json();
         if (!response.ok) throw new Error(result.error || "Video status check failed.");
         const progress = Math.max(40, Math.min(92, Number(result.video?.progress ?? result.job?.progress ?? 40 + attempt * 3)));
-        const saved = normalizeSavedMedia(result.saved, "video", result.provider || provider, result.model || model);
+        const saved = enhanceSavedMedia(
+          normalizeSavedMedia(result.saved, "video", result.provider || provider, result.model || model),
+          { prompt: videoPrompt, mode: "video", resultType: "Generated video" }
+        );
 
         if (saved.length || result.status === "completed") {
           if (saved.length) setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
+          if (saved.length) touchActiveProject();
           setOperation({
             type: "Video generation",
             provider: providerLabel(result.provider || provider),
@@ -571,9 +806,13 @@ function App() {
       if (!response.ok && !["stopped", "blocked"].includes(result.status)) throw new Error(result.error || result.message || "Minimal Styling failed.");
 
       setMinimalStyling(result);
-      const saved = normalizeSavedMedia(result.saved, "image", result.provider || "xai", result.model || editModel, "Minimal styling");
+      const saved = enhanceSavedMedia(
+        normalizeSavedMedia(result.saved, "image", result.provider || "xai", result.model || editModel, "Minimal styling"),
+        { prompt: result.attempts?.find((attempt) => attempt.prompt)?.prompt || result.plan?.primaryPrompt || editPrompt, mode: "edit", resultType: "Minimal styling" }
+      );
       if (saved.length) {
         setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
+        touchActiveProject();
         setAgentReference(saved[0]);
         setAgentFile(null);
       }
@@ -790,16 +1029,20 @@ function App() {
       const response = await fetch(endpoint, { method: "POST", body: formData });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Agent action failed.");
-      const saved = normalizeSavedMedia(
-        result.saved,
-        isVideo ? "video" : "image",
-        result.provider || "xai",
-        result.model || (isVideo ? "grok-imagine-video" : "grok-imagine-image"),
-        isEdit ? "Agent edited image" : isVideo ? "Agent video" : "Agent generated image"
+      const saved = enhanceSavedMedia(
+        normalizeSavedMedia(
+          result.saved,
+          isVideo ? "video" : "image",
+          result.provider || "xai",
+          result.model || (isVideo ? "grok-imagine-video" : "grok-imagine-image"),
+          isEdit ? "Agent edited image" : isVideo ? "Agent video" : "Agent generated image"
+        ),
+        { prompt: message.prompt || message.text || agentInput, mode: isVideo ? "video" : isEdit ? "edit" : "image", resultType: isEdit ? "Agent edited image" : isVideo ? "Agent video" : "Agent generated image" }
       );
 
       if (saved.length) {
         setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
+        touchActiveProject();
         const nextImage = saved.find((item) => item.kind === "image");
         if (nextImage) {
           setAgentReference(nextImage);
@@ -1138,9 +1381,17 @@ function App() {
         refreshBillingSnapshot();
       }
 
-      const saved = normalizeSavedMedia(execution.saved, plan.mode === "video" ? "video" : "image", execution.provider || plan.recommended_provider, execution.model || plan.recommended_model, "Assistant routed result");
+      const saved = enhanceSavedMedia(
+        normalizeSavedMedia(execution.saved, plan.mode === "video" ? "video" : "image", execution.provider || plan.recommended_provider, execution.model || plan.recommended_model, "Assistant routed result"),
+        {
+          prompt: plan.prompt_improvements || message,
+          mode: plan.mode || routeMode,
+          resultType: readableIntent(plan.intent || plan.mode || routeMode)
+        }
+      );
       if (saved.length) {
         setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 24));
+        touchActiveProject();
         const firstImage = saved.find((item) => item.kind === "image");
         if (firstImage) {
           setAgentReference(firstImage);
@@ -1292,6 +1543,16 @@ function App() {
           </div>
         </header>
 
+        <ProjectCommandBar
+          projects={projects}
+          activeProject={activeProject}
+          activeProjectId={activeProjectId}
+          setActiveProjectId={setActiveProjectId}
+          onCreateProject={createProject}
+          outputCount={projectMediaResults.length}
+          promptCount={promptLibrary.filter((prompt) => prompt.projectId === activeProject.id || activeProject.id === defaultProjectId).length}
+        />
+
         <div className="modeTabs" role="tablist" aria-label="AI workflow modes">
           {workspaceModes.map((mode) => (
             <button
@@ -1326,7 +1587,20 @@ function App() {
           videoProvider={videoProvider}
         />
 
-        <ResultsStudio operation={operation} mediaResults={mediaResults} onOpenLocation={openSavedLocation} />
+        <ResultsStudio
+          operation={operation}
+          mediaResults={filteredProjectMedia}
+          activeProject={activeProject}
+          filters={outputFilters}
+          setFilters={setOutputFilters}
+          compareItems={compareItems}
+          onOpenLocation={openSavedLocation}
+          onToggleFavorite={toggleMediaFavorite}
+          onReusePrompt={reuseResultPrompt}
+          onGenerateSimilar={generateSimilarFromResult}
+          onAnimate={animateResultToVideo}
+          onCompare={toggleCompareItem}
+        />
 
         <GrokAgentChat
           messages={agentMessages}
@@ -1508,6 +1782,10 @@ function App() {
             disabled={isRouting}
             costHint={actionCostHint("image", imageModel)}
             onGenerate={() => callAssistantRouter({ mode: "image" })}
+            recommendation={activeMode === "image" ? currentRecommendation : null}
+            onApplyRecommendation={applyRecommendation}
+            onSavePrompt={saveCurrentPrompt}
+            onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
           >
             <ModelPicker
               label="Image processor"
@@ -1535,6 +1813,10 @@ function App() {
             disabled={isRouting}
             costHint={actionCostHint("image_edit", editModel)}
             onGenerate={callImageEdit}
+            recommendation={activeMode === "edit" ? currentRecommendation : null}
+            onApplyRecommendation={applyRecommendation}
+            onSavePrompt={saveCurrentPrompt}
+            onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
           >
             <input
               ref={editInputRef}
@@ -1613,6 +1895,10 @@ function App() {
             disabled={isRouting || videoBudgetBlocked}
             costHint={videoBudgetBlocked ? "Video is disabled because the remaining monthly budget is below the next video estimate." : actionCostHint("video", videoModel)}
             onGenerate={callAssistantRouter}
+            recommendation={activeMode === "video" ? currentRecommendation : null}
+            onApplyRecommendation={applyRecommendation}
+            onSavePrompt={saveCurrentPrompt}
+            onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
           >
             <ModelPicker
               label="Video processor"
@@ -1659,7 +1945,59 @@ function App() {
           isRouting={isRouting}
         />
       )}
+      {promptLibraryOpen && (
+        <PromptLibraryDrawer
+          prompts={promptLibrary}
+          activeMode={activeMode}
+          onClose={() => setPromptLibraryOpen(false)}
+          onInsert={applyPromptFromLibrary}
+          onToggleFavorite={togglePromptFavorite}
+        />
+      )}
     </main>
+  );
+}
+
+function ProjectCommandBar({ projects, activeProject, activeProjectId, setActiveProjectId, onCreateProject, outputCount, promptCount }) {
+  const recentProjects = sortProjects(projects).slice(0, 4);
+  return (
+    <section className="phase2StudioBar" aria-label="Project workspace">
+      <div className="projectSwitcher">
+        <div className="projectSwitcherLabel">
+          <FolderKanban size={17} />
+          <div>
+            <span>Current project</span>
+            <strong>{activeProject?.name || "Main Studio"}</strong>
+          </div>
+        </div>
+        <select value={activeProjectId} onChange={(event) => setActiveProjectId(event.target.value)}>
+          {sortProjects(projects).map((project) => (
+            <option key={project.id} value={project.id}>{project.name}</option>
+          ))}
+        </select>
+        <button type="button" onClick={onCreateProject}>
+          <Plus size={15} />
+          New project
+        </button>
+      </div>
+      <div className="projectContextStats">
+        <span><Layers size={14} /> {outputCount} outputs</span>
+        <span><Tag size={14} /> {promptCount} prompts</span>
+        <span>Updated {relativeProjectTime(activeProject)}</span>
+      </div>
+      <div className="recentProjects">
+        {recentProjects.map((project) => (
+          <button
+            key={project.id}
+            type="button"
+            className={project.id === activeProjectId ? "active" : ""}
+            onClick={() => setActiveProjectId(project.id)}
+          >
+            {project.name}
+          </button>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -2107,7 +2445,20 @@ function CommandPalette({ onClose, setActiveMode, onUpload, onRoute, isRouting }
   );
 }
 
-function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
+function ResultsStudio({
+  operation,
+  mediaResults,
+  activeProject,
+  filters,
+  setFilters,
+  compareItems = [],
+  onOpenLocation,
+  onToggleFavorite,
+  onReusePrompt,
+  onGenerateSimilar,
+  onAnimate,
+  onCompare
+}) {
   const orderedResults = sortMediaResults(mediaResults);
   const latestResult = orderedResults[0];
   const historyResults = orderedResults.slice(1, 12);
@@ -2134,11 +2485,27 @@ function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
       </div>
 
       <div className="mediaGallery mediaGalleryModern">
-        <ReturnedMediaHeader count={orderedResults.length} latestResult={latestResult} isLoading={isActiveRequest} />
+        <ReturnedMediaHeader count={orderedResults.length} latestResult={latestResult} isLoading={isActiveRequest} activeProject={activeProject} />
+        <OutputFilters filters={filters} setFilters={setFilters} />
+        <VariantComparePanel items={compareItems} onClear={() => compareItems.forEach((item) => onCompare?.(item))} onOpenLocation={onOpenLocation} />
         {orderedResults.length ? (
           <>
-            <LatestResultCard result={latestResult} onOpenLocation={onOpenLocation} />
-            <MediaHistoryRail results={historyResults} activeResult={latestResult} onOpenLocation={onOpenLocation} />
+            <LatestResultCard
+              result={latestResult}
+              onOpenLocation={onOpenLocation}
+              onToggleFavorite={onToggleFavorite}
+              onReusePrompt={onReusePrompt}
+              onGenerateSimilar={onGenerateSimilar}
+              onAnimate={onAnimate}
+              onCompare={onCompare}
+            />
+            <MediaHistoryRail
+              results={historyResults}
+              activeResult={latestResult}
+              onOpenLocation={onOpenLocation}
+              onToggleFavorite={onToggleFavorite}
+              onCompare={onCompare}
+            />
           </>
         ) : isActiveRequest ? (
           <ReturnedMediaLoadingState operation={operation} />
@@ -2150,19 +2517,64 @@ function ResultsStudio({ operation, mediaResults, onOpenLocation }) {
   );
 }
 
-function ReturnedMediaHeader({ count, latestResult, isLoading }) {
+function ReturnedMediaHeader({ count, latestResult, isLoading, activeProject }) {
   return (
     <div className="galleryHeader returnedMediaHeader">
       <div>
         <span>Returned media</span>
         <strong>{count} saved result{count === 1 ? "" : "s"}</strong>
       </div>
-      <small>{latestResult ? `Latest saved ${relativeSavedTime(latestResult)}` : isLoading ? "Waiting for provider output" : "No saved outputs yet"}</small>
+      <small>{activeProject?.name ? `${activeProject.name} · ` : ""}{latestResult ? `Latest ${relativeSavedTime(latestResult)}` : isLoading ? "Waiting for provider output" : "No saved outputs yet"}</small>
     </div>
   );
 }
 
-function LatestResultCard({ result, onOpenLocation }) {
+function OutputFilters({ filters, setFilters }) {
+  if (!filters || !setFilters) return null;
+  return (
+    <div className="outputFilters">
+      <label>
+        <Search size={14} />
+        <input
+          value={filters.query}
+          placeholder="Search prompt, model, filename..."
+          onChange={(event) => setFilters({ ...filters, query: event.target.value })}
+        />
+      </label>
+      <select value={filters.provider} onChange={(event) => setFilters({ ...filters, provider: event.target.value })}>
+        {providerFilterOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <select value={filters.type} onChange={(event) => setFilters({ ...filters, type: event.target.value })}>
+        {outputTypeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function VariantComparePanel({ items, onClear, onOpenLocation }) {
+  if (!items?.length) return null;
+  return (
+    <div className="variantComparePanel">
+      <div className="variantCompareHeader">
+        <div>
+          <span>Compare mode</span>
+          <strong>{items.length} selected variant{items.length === 1 ? "" : "s"}</strong>
+        </div>
+        <button type="button" onClick={onClear}>Clear</button>
+      </div>
+      <div className="variantCompareGrid">
+        {items.map((item) => (
+          <button key={item.id} type="button" onClick={() => onOpenLocation?.(item)}>
+            {item.kind === "video" ? <video src={item.url} /> : <img src={item.url} alt={item.label} />}
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LatestResultCard({ result, onOpenLocation, onToggleFavorite, onReusePrompt, onGenerateSimilar, onAnimate, onCompare }) {
   if (!result) return null;
   return (
     <article className="latestMediaCard">
@@ -2177,7 +2589,15 @@ function LatestResultCard({ result, onOpenLocation }) {
         <span>Latest result</span>
         <strong>{result.label}</strong>
         <ResultMetadata result={result} />
-        <ResultActions result={result} onOpenLocation={onOpenLocation} />
+        <ResultActions
+          result={result}
+          onOpenLocation={onOpenLocation}
+          onToggleFavorite={onToggleFavorite}
+          onReusePrompt={onReusePrompt}
+          onGenerateSimilar={onGenerateSimilar}
+          onAnimate={onAnimate}
+          onCompare={onCompare}
+        />
       </div>
     </article>
   );
@@ -2193,21 +2613,29 @@ function ResultMetadata({ result }) {
   );
 }
 
-function ResultActions({ result, onOpenLocation }) {
+function ResultActions({ result, onOpenLocation, onToggleFavorite, onReusePrompt, onGenerateSimilar, onAnimate, onCompare }) {
   return (
     <div className="resultActionRow">
       <button type="button" className="openLocationButton primary" onClick={() => onOpenLocation?.(result)}>
         <FolderOpen size={14} />
         Open saved folder
       </button>
+      <button type="button" className="openLocationButton secondary" onClick={() => onToggleFavorite?.(result)}>
+        <Star size={14} fill={result.isFavorite ? "currentColor" : "none"} />
+        {result.isFavorite ? "Favorited" : "Favorite"}
+      </button>
       <a className="openLocationButton secondary" href={result.url} target="_blank" rel="noreferrer">
         View full
       </a>
+      <button type="button" className="openLocationButton secondary" onClick={() => onReusePrompt?.(result)}>Reuse prompt</button>
+      <button type="button" className="openLocationButton secondary" onClick={() => onGenerateSimilar?.(result)}>Generate similar</button>
+      {result.kind === "image" && <button type="button" className="openLocationButton secondary" onClick={() => onAnimate?.(result)}>Animate</button>}
+      <button type="button" className="openLocationButton secondary" onClick={() => onCompare?.(result)}><GitCompare size={14} /> Compare</button>
     </div>
   );
 }
 
-function MediaHistoryRail({ results, activeResult, onOpenLocation }) {
+function MediaHistoryRail({ results, activeResult, onOpenLocation, onToggleFavorite, onCompare }) {
   if (!results.length) return null;
   return (
     <div className="mediaHistoryTray" aria-label="Earlier returned media">
@@ -2217,22 +2645,28 @@ function MediaHistoryRail({ results, activeResult, onOpenLocation }) {
       </div>
       <div className="mediaHistoryScroller">
         {results.map((item) => (
-          <MediaThumbCard key={item.id} item={item} active={activeResult?.id === item.id} onOpenLocation={onOpenLocation} />
+          <MediaThumbCard key={item.id} item={item} active={activeResult?.id === item.id} onOpenLocation={onOpenLocation} onToggleFavorite={onToggleFavorite} onCompare={onCompare} />
         ))}
       </div>
     </div>
   );
 }
 
-function MediaThumbCard({ item, active, onOpenLocation }) {
+function MediaThumbCard({ item, active, onOpenLocation, onToggleFavorite, onCompare }) {
   return (
-    <button type="button" className={`mediaHistoryItem ${active ? "active" : ""}`} onClick={() => onOpenLocation?.(item)} title={item.path || item.url}>
-      <span className="mediaThumbFrame">
-        {item.kind === "video" ? <video src={item.url} /> : <img src={item.url} alt={item.label} />}
-      </span>
-      <strong>{item.label}</strong>
-      <small>{relativeSavedTime(item)}</small>
-    </button>
+    <article className={`mediaHistoryItem ${active ? "active" : ""}`} title={item.path || item.url}>
+      <button type="button" className="mediaThumbOpen" onClick={() => onOpenLocation?.(item)}>
+        <span className="mediaThumbFrame">
+          {item.kind === "video" ? <video src={item.url} /> : <img src={item.url} alt={item.label} />}
+        </span>
+        <strong>{item.label}</strong>
+        <small>{relativeSavedTime(item)}</small>
+      </button>
+      <div className="mediaThumbActions">
+        <button type="button" onClick={() => onToggleFavorite?.(item)}><Star size={12} fill={item.isFavorite ? "currentColor" : "none"} /></button>
+        <button type="button" onClick={() => onCompare?.(item)}><GitCompare size={12} /></button>
+      </div>
+    </article>
   );
 }
 
@@ -2857,6 +3291,9 @@ function manifestToMediaResult(item) {
     filename: item.filename,
     costUsd: Number(item.costUsd || item.estimatedCostUsd || 0),
     savedAt: item.createdAt || new Date().toISOString(),
+    projectId: item.projectId || defaultProjectId,
+    prompt: item.prompt || "",
+    isFavorite: Boolean(item.isFavorite),
     createdAt: item.createdAt
       ? new Date(item.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
       : new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
@@ -2872,6 +3309,29 @@ function mergeMediaResults(current = [], incoming = []) {
     seen.add(key);
     return true;
   }));
+}
+
+function mediaBelongsToProject(item, activeProjectId = defaultProjectId) {
+  if (!item.projectId) return activeProjectId === defaultProjectId;
+  return item.projectId === activeProjectId;
+}
+
+function filterMediaResults(items = [], filters = {}) {
+  const query = String(filters.query || "").toLowerCase().trim();
+  const provider = String(filters.provider || "all").toLowerCase();
+  const type = String(filters.type || "all").toLowerCase();
+  return sortMediaResults(items).filter((item) => {
+    const searchable = `${item.label || ""} ${item.prompt || ""} ${item.model || ""} ${item.filename || ""}`.toLowerCase();
+    const matchesQuery = !query || searchable.includes(query);
+    const providerKey = providerValueFromLabel(item.provider);
+    const matchesProvider = provider === "all" || providerKey === provider;
+    const label = String(item.label || item.resultType || "").toLowerCase();
+    const matchesType = type === "all"
+      || (type === "favorite" && item.isFavorite)
+      || (type === "edited" && label.includes("edit"))
+      || item.kind === type;
+    return matchesQuery && matchesProvider && matchesType;
+  });
 }
 
 function sortMediaResults(items = []) {
@@ -2914,6 +3374,14 @@ function providerLabel(provider) {
   if (provider === "xai" || provider === "grok") return "Grok / xAI";
   if (provider === "gemini" || provider === "google") return "Google Gemini";
   return "OpenAI";
+}
+
+function providerValueFromLabel(provider = "") {
+  const label = String(provider || "").toLowerCase();
+  if (label.includes("grok") || label.includes("xai")) return "xai";
+  if (label.includes("gemini") || label.includes("google")) return "gemini";
+  if (label.includes("openai")) return "openai";
+  return "";
 }
 
 function readableIntent(intent = "") {
@@ -3186,6 +3654,120 @@ function formatUsd(value) {
   return `$${value.toFixed(2)}`;
 }
 
+function loadStoredArray(key, fallback = []) {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || "null");
+    return Array.isArray(parsed) && parsed.length ? parsed : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function seedPromptLibrary() {
+  const now = new Date().toISOString();
+  return [
+    {
+      id: "prompt-editorial-suit",
+      title: "Luxury editorial suit",
+      prompt: "Create a photorealistic full-body fashion editorial image in a luxury interior, premium tailoring, natural daylight, realistic fabric detail, clean background, vertical composition.",
+      negativePrompt: "No text, logos, distorted hands, duplicate limbs, or unrealistic body proportions.",
+      tags: ["editorial", "tailoring", "photoreal"],
+      type: "image",
+      providerCompatibility: ["OpenAI", "Gemini", "Grok"],
+      favorite: true,
+      projectId: defaultProjectId,
+      createdAt: now
+    },
+    {
+      id: "prompt-fit-video",
+      title: "Fit-review walk cycle",
+      prompt: "Animate the fashion model into a smooth fit-review turn and short walk cycle. Keep identity, outfit, body proportions, lighting, and styling consistent. Realistic fabric movement, no text or logos.",
+      negativePrompt: "",
+      tags: ["video", "fit-review", "consistent"],
+      type: "video",
+      providerCompatibility: ["Gemini", "OpenAI", "Grok"],
+      favorite: true,
+      projectId: defaultProjectId,
+      createdAt: now
+    }
+  ];
+}
+
+function promptTitle(prompt = "") {
+  const clean = String(prompt).replace(/\s+/g, " ").trim();
+  return clean.length > 46 ? `${clean.slice(0, 43)}...` : clean || "Saved prompt";
+}
+
+function inferPromptTags(prompt = "", mode = "image") {
+  const lower = prompt.toLowerCase();
+  const tags = new Set([mode === "video" ? "video" : mode === "edit" ? "edit" : "image"]);
+  if (lower.includes("editorial")) tags.add("editorial");
+  if (lower.includes("studio")) tags.add("studio");
+  if (lower.includes("luxury")) tags.add("luxury");
+  if (lower.includes("realistic") || lower.includes("photoreal")) tags.add("photoreal");
+  if (lower.includes("consistent")) tags.add("consistent");
+  return Array.from(tags).slice(0, 5);
+}
+
+function compatibleProvidersForMode(mode) {
+  if (mode === "video") return ["OpenAI", "Gemini", "Grok"];
+  if (mode === "edit") return ["Grok", "Gemini"];
+  if (mode === "measure") return ["Grok", "OpenAI", "Gemini"];
+  return ["OpenAI", "Gemini", "Grok"];
+}
+
+function sortProjects(projects = []) {
+  return [...projects].sort((a, b) => Date.parse(b.updatedAt || b.createdAt || 0) - Date.parse(a.updatedAt || a.createdAt || 0));
+}
+
+function relativeProjectTime(project = {}) {
+  if (!project?.updatedAt) return "just now";
+  const seconds = Math.max(0, Math.floor((Date.now() - Date.parse(project.updatedAt)) / 1000));
+  if (seconds < 60) return "just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  return `${Math.floor(hours / 24)} day${hours >= 48 ? "s" : ""} ago`;
+}
+
+function buildModelRecommendation(mode, context = {}) {
+  if (mode === "video") {
+    return {
+      provider: "gemini",
+      providerLabel: "Google Gemini",
+      model: videoModelOptions.gemini[0].value,
+      modelLabel: videoModelOptions.gemini[0].label,
+      reason: "Best fit for image-to-video and async creative video jobs. You can still override to Sora or Grok."
+    };
+  }
+  if (mode === "edit") {
+    return {
+      provider: "xai",
+      providerLabel: "Grok / xAI",
+      model: editModelOptions.xai[1].value,
+      modelLabel: editModelOptions.xai[1].label,
+      reason: "Best current path for image editing and restyling while keeping a clear source image context."
+    };
+  }
+  if (mode === "measure") {
+    return {
+      provider: "xai",
+      providerLabel: "Grok / xAI",
+      model: measurementModelOptions.xai[0].value,
+      modelLabel: measurementModelOptions.xai[0].label,
+      reason: "Reasoning vision is best for body-measurement analysis and confidence notes."
+    };
+  }
+  return {
+    provider: "openai",
+    providerLabel: "OpenAI",
+    model: imageModelOptions.openai[0].value,
+    modelLabel: imageModelOptions.openai[0].label,
+    reason: "Strong default for prompt-to-image generation and polished fashion editorial compositions."
+  };
+}
+
 function ShoppingModal({ guide, onClose }) {
   return (
     <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label={`${guide.title} shopping guide`}>
@@ -3224,7 +3806,23 @@ function ShoppingModal({ guide, onClose }) {
   );
 }
 
-function GeneratorCard({ icon, title, subtitle, prompt, setPrompt, primaryLabel, busyLabel = "Working", disabled = false, costHint = "", onGenerate, children }) {
+function GeneratorCard({
+  icon,
+  title,
+  subtitle,
+  prompt,
+  setPrompt,
+  primaryLabel,
+  busyLabel = "Working",
+  disabled = false,
+  costHint = "",
+  onGenerate,
+  recommendation,
+  onApplyRecommendation,
+  onSavePrompt,
+  onOpenPromptLibrary,
+  children
+}) {
   return (
     <article className="generatorCard">
       <div className="panelHeader">
@@ -3234,8 +3832,13 @@ function GeneratorCard({ icon, title, subtitle, prompt, setPrompt, primaryLabel,
           <p>{subtitle}</p>
         </div>
       </div>
+      {recommendation && <ModelRecommendationCard recommendation={recommendation} onApply={onApplyRecommendation} />}
       <label className="promptBox">
-        <span>Creative direction</span>
+        <span>
+          Creative direction
+          <button type="button" onClick={onSavePrompt}><Star size={13} /> Save prompt</button>
+          <button type="button" onClick={onOpenPromptLibrary}><Tag size={13} /> Library</button>
+        </span>
         <textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} />
       </label>
       <details className="advancedDetails">
@@ -3248,6 +3851,75 @@ function GeneratorCard({ icon, title, subtitle, prompt, setPrompt, primaryLabel,
         {disabled ? busyLabel : primaryLabel}
       </button>
     </article>
+  );
+}
+
+function ModelRecommendationCard({ recommendation, onApply }) {
+  return (
+    <div className="modelRecommendationCard">
+      <div>
+        <span>Recommended for this task</span>
+        <strong>{recommendation.providerLabel} · {recommendation.modelLabel}</strong>
+        <small>{recommendation.reason}</small>
+      </div>
+      <button type="button" onClick={() => onApply?.(recommendation)}>Apply</button>
+    </div>
+  );
+}
+
+function PromptLibraryDrawer({ prompts, activeMode, onClose, onInsert, onToggleFavorite }) {
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("all");
+  const filtered = prompts.filter((prompt) => {
+    const text = `${prompt.title} ${prompt.prompt} ${(prompt.tags || []).join(" ")}`.toLowerCase();
+    const matchesQuery = !query || text.includes(query.toLowerCase());
+    const matchesType = type === "all" || prompt.type === type;
+    return matchesQuery && matchesType;
+  });
+
+  return (
+    <div className="promptDrawerBackdrop" onMouseDown={onClose}>
+      <aside className="promptLibraryDrawer" onMouseDown={(event) => event.stopPropagation()}>
+        <div className="promptDrawerHeader">
+          <div>
+            <span>Prompt library</span>
+            <strong>Reuse successful creative directions</strong>
+          </div>
+          <button type="button" onClick={onClose}>Close</button>
+        </div>
+        <div className="promptLibraryFilters">
+          <label><Search size={14} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search prompts or tags" /></label>
+          <select value={type} onChange={(event) => setType(event.target.value)}>
+            <option value="all">All types</option>
+            <option value="image">Image</option>
+            <option value="edit">Edit</option>
+            <option value="video">Video</option>
+          </select>
+        </div>
+        <div className="promptLibraryList">
+          {filtered.length ? filtered.map((prompt) => (
+            <article key={prompt.id} className="promptLibraryItem">
+              <div>
+                <span>{prompt.type} · {(prompt.providerCompatibility || []).join(", ")}</span>
+                <strong>{prompt.title}</strong>
+                <p>{prompt.prompt}</p>
+                <div>{(prompt.tags || []).map((tag) => <em key={tag}>{tag}</em>)}</div>
+              </div>
+              <div className="promptLibraryActions">
+                <button type="button" onClick={() => onToggleFavorite(prompt.id)}><Star size={14} fill={prompt.favorite ? "currentColor" : "none"} /></button>
+                <button type="button" onClick={() => onInsert(prompt)}>Insert</button>
+              </div>
+            </article>
+          )) : (
+            <div className="promptLibraryEmpty">
+              <Sparkles size={22} />
+              <strong>No prompts found</strong>
+              <span>Save a prompt from the editor to build a reusable studio library.</span>
+            </div>
+          )}
+        </div>
+      </aside>
+    </div>
   );
 }
 
