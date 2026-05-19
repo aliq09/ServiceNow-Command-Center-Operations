@@ -3771,6 +3771,28 @@ function buildModelRecommendation(mode, context = {}) {
 }
 
 function ShoppingModal({ guide, onClose }) {
+  const [commerceContext, setCommerceContext] = useState(null);
+  const [commerceLoading, setCommerceLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCommerceLoading(true);
+    fetch(`/api/commerce/context?category=${encodeURIComponent(guide.type)}&size=${encodeURIComponent(guide.size)}`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (!cancelled) setCommerceContext(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCommerceContext(null);
+      })
+      .finally(() => {
+        if (!cancelled) setCommerceLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [guide.type, guide.size]);
+
   return (
     <div className="modalBackdrop" role="dialog" aria-modal="true" aria-label={`${guide.title} shopping guide`}>
       <section className="shoppingModal">
@@ -3813,6 +3835,8 @@ function ShoppingModal({ guide, onClose }) {
           </ul>
         </div>
 
+        <CommerceLivePanel context={commerceContext} loading={commerceLoading} guide={guide} />
+
         <div className="storeGrid">
           {guide.products.map((product) => (
             <a key={product.name} className="storeCard" href={product.href} target="_blank" rel="noreferrer">
@@ -3830,6 +3854,86 @@ function ShoppingModal({ guide, onClose }) {
         </div>
       </section>
     </div>
+  );
+}
+
+function CommerceLivePanel({ context, loading, guide }) {
+  if (loading) {
+    return (
+      <div className="commerceLivePanel loading">
+        <div>
+          <span>Live market layer</span>
+          <strong>Loading currency, weather and seasonal signals</strong>
+        </div>
+        <RefreshCw size={18} />
+      </div>
+    );
+  }
+
+  const data = context || {
+    baseCurrency: "GBP",
+    rates: { GBP: 1, USD: 1.27, EUR: 1.17, AED: 4.65, PKR: 356, live: false },
+    weather: { city: "London", summary: "Weather unavailable", stylingCue: "Use the retailer size guide before buying.", live: false },
+    trends: [],
+    priceBoard: []
+  };
+
+  return (
+    <section className="commerceLivePanel">
+      <div className="commerceHeader">
+        <div>
+          <span>Live shopping intelligence</span>
+          <strong>{guide.size} · base {data.baseCurrency || "GBP"}</strong>
+          <small>{data.note || "Currency and weather context are refreshed when available."}</small>
+        </div>
+        <em>{data.status === "live" ? "Live" : "Guide"}</em>
+      </div>
+
+      <div className="currencyStrip">
+        {["GBP", "USD", "EUR", "AED", "PKR"].map((currency) => (
+          <article key={currency}>
+            <span>{currency}</span>
+            <strong>{currency === "GBP" ? "1.00" : Number(data.rates?.[currency] || 0).toFixed(currency === "PKR" ? 0 : 2)}</strong>
+          </article>
+        ))}
+      </div>
+
+      <div className="commerceGrid">
+        <div className="weatherWidget">
+          <span>Weather styling cue</span>
+          <strong>{data.weather?.summary || "Weather unavailable"}</strong>
+          <p>{data.weather?.stylingCue}</p>
+        </div>
+        <div className="trendFeed">
+          <span>Seasonal trend feed</span>
+          {(data.trends || []).map((trend) => (
+            <article key={trend.label}>
+              <strong>{trend.value}</strong>
+              <small>{trend.label} · {trend.note}</small>
+            </article>
+          ))}
+        </div>
+      </div>
+
+      <div className="priceBoard">
+        <div className="priceBoardHeader">
+          <span>Main retailer board</span>
+          <strong>Price guide by retailer</strong>
+        </div>
+        {(data.priceBoard || []).map((row) => (
+          <article key={row.retailer}>
+            <div>
+              <span>{row.retailer}</span>
+              <strong>{row.rangeGbp}</strong>
+              <small>{row.note}</small>
+            </div>
+            <div className="convertedPrices">
+              {(row.currencies || []).map((item) => <em key={item.currency}>{item.currency} {item.range}</em>)}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -4247,6 +4351,7 @@ function buildShoppingGuide(item, fitProfile) {
     return {
       eyebrow: "UK fit-to-shop recommendation",
       title: "Bra matches for this measurement scan",
+      type: item.type,
       size: item.value,
       videoLabel: "Bra fit preview",
       matchScore: confidence,
@@ -4294,6 +4399,7 @@ function buildShoppingGuide(item, fitProfile) {
   return {
     eyebrow: "UK fit-to-shop recommendation",
     title: "Underwear matches for this measurement scan",
+    type: item.type,
     size: item.value,
     videoLabel: "Underwear fit preview",
     matchScore: confidence,

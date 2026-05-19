@@ -140,6 +140,43 @@ app.get("/api/health", async (_req, res) => {
   }
 });
 
+app.get("/api/commerce/context", async (req, res) => {
+  try {
+    const category = String(req.query.category || "bra").toLowerCase();
+    const size = String(req.query.size || "");
+    const [rates, weather] = await Promise.all([
+      fetchCurrencyRates(),
+      fetchUkWeatherContext()
+    ]);
+    const priceBoard = buildRetailPriceBoard(category, size, rates);
+    res.json({
+      status: "live",
+      baseCurrency: "GBP",
+      generatedAt: new Date().toISOString(),
+      size,
+      category,
+      rates,
+      weather,
+      trends: buildSeasonalTrendFeed(category, weather),
+      priceBoard,
+      note: "Retailer prices are guide ranges until product-feed APIs are connected. Currency rates and weather are refreshed live when available."
+    });
+  } catch (error) {
+    res.json({
+      status: "fallback",
+      baseCurrency: "GBP",
+      generatedAt: new Date().toISOString(),
+      size: String(req.query.size || ""),
+      category: String(req.query.category || "bra"),
+      rates: fallbackCurrencyRates(),
+      weather: fallbackWeatherContext(),
+      trends: buildSeasonalTrendFeed(String(req.query.category || "bra"), fallbackWeatherContext()),
+      priceBoard: buildRetailPriceBoard(String(req.query.category || "bra"), String(req.query.size || ""), fallbackCurrencyRates()),
+      note: error.message || "Live commerce context unavailable. Showing fallback price guide."
+    });
+  }
+});
+
 app.get("/api/history/:id", (req, res) => {
   const item = assistantHistory.get(req.params.id);
   if (!item) {
@@ -2163,6 +2200,142 @@ function mapSizeToAspectRatio(size) {
 app.use((error, _req, res, _next) => {
   res.status(statusForError(error)).json({ error: error.message || "Server request failed." });
 });
+
+async function fetchCurrencyRates() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const response = await fetch("https://open.er-api.com/v6/latest/GBP", { signal: controller.signal });
+    if (!response.ok) throw new Error("Currency service unavailable.");
+    const payload = await response.json();
+    const source = payload?.rates || {};
+    const rates = {
+      GBP: 1,
+      USD: Number(source.USD || 1.27),
+      EUR: Number(source.EUR || 1.17),
+      AED: Number(source.AED || 4.65),
+      PKR: Number(source.PKR || 356)
+    };
+    return { ...rates, source: "open.er-api.com", live: true };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function fallbackCurrencyRates() {
+  return { GBP: 1, USD: 1.27, EUR: 1.17, AED: 4.65, PKR: 356, source: "fallback", live: false };
+}
+
+async function fetchUkWeatherContext() {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 4000);
+  try {
+    const url = "https://api.open-meteo.com/v1/forecast?latitude=51.5072&longitude=-0.1276&current=temperature_2m,precipitation,wind_speed_10m,weather_code&timezone=Europe%2FLondon";
+    const response = await fetch(url, { signal: controller.signal });
+    if (!response.ok) throw new Error("Weather service unavailable.");
+    const payload = await response.json();
+    const current = payload?.current || {};
+    const temperature = Number(current.temperature_2m ?? 14);
+    const precipitation = Number(current.precipitation ?? 0);
+    return {
+      city: "London",
+      temperatureC: temperature,
+      precipitationMm: precipitation,
+      windKph: Number(current.wind_speed_10m ?? 0),
+      code: Number(current.weather_code ?? 0),
+      summary: weatherSummary(Number(current.weather_code ?? 0), temperature, precipitation),
+      stylingCue: weatherStylingCue(temperature, precipitation),
+      live: true
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function fallbackWeatherContext() {
+  return {
+    city: "London",
+    temperatureC: 14,
+    precipitationMm: 0,
+    windKph: 8,
+    code: 1,
+    summary: "Mild London weather",
+    stylingCue: "Layerable swimwear, resortwear and breathable lingerie edits are suitable.",
+    live: false
+  };
+}
+
+function weatherSummary(code, temperature, precipitation) {
+  if (precipitation > 0.4 || code >= 51) return `${Math.round(temperature)}°C with showers`;
+  if (temperature >= 22) return `${Math.round(temperature)}°C and warm`;
+  if (temperature <= 8) return `${Math.round(temperature)}°C and cool`;
+  return `${Math.round(temperature)}°C and mild`;
+}
+
+function weatherStylingCue(temperature, precipitation) {
+  if (precipitation > 0.4) return "Prioritise quick-dry swimwear, cover-ups, neutral layers and practical delivery timing.";
+  if (temperature >= 22) return "Push bikini, resortwear, linen cover-up and brighter colour recommendations.";
+  if (temperature <= 8) return "Emphasise lingerie basics, shapewear, lounge sets and thermal layering rather than swim.";
+  return "Blend lingerie basics with holiday swim and transitional resortwear edits.";
+}
+
+function buildRetailPriceBoard(category, size, rates = fallbackCurrencyRates()) {
+  const isBra = String(category).includes("bra");
+  const rows = isBra
+    ? [
+        { retailer: "M&S", low: 14, high: 38, note: "Everyday, full cup, T-shirt, balcony" },
+        { retailer: "John Lewis", low: 22, high: 72, note: "Branded and premium cup-shape variety" },
+        { retailer: "Next", low: 12, high: 36, note: "Everyday, multipack and fast availability" },
+        { retailer: "ASOS", low: 10, high: 45, note: "Trend-led lingerie and swim styling" }
+      ]
+    : [
+        { retailer: "M&S", low: 6, high: 22, note: "Multipacks, no-VPL, cotton and lace" },
+        { retailer: "John Lewis", low: 10, high: 38, note: "Premium briefs, shapewear and brands" },
+        { retailer: "Next", low: 7, high: 24, note: "Briefs, thongs, shapewear and sets" },
+        { retailer: "ASOS", low: 6, high: 28, note: "Trend-led lingerie and bikini bottoms" }
+      ];
+
+  return rows.map((row) => ({
+    ...row,
+    size,
+    rangeGbp: formatCurrencyRange(row.low, row.high, "GBP", 1),
+    currencies: ["USD", "EUR", "AED", "PKR"].map((currency) => ({
+      currency,
+      range: formatCurrencyRange(row.low, row.high, currency, rates[currency] || 1)
+    }))
+  }));
+}
+
+function formatCurrencyRange(low, high, currency, rate) {
+  const formatter = new Intl.NumberFormat("en-GB", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: currency === "PKR" ? 0 : 2
+  });
+  return `${formatter.format(low * rate)}-${formatter.format(high * rate)}`;
+}
+
+function buildSeasonalTrendFeed(category, weather = fallbackWeatherContext()) {
+  const month = new Date().getMonth();
+  const isSummer = month >= 4 && month <= 8;
+  const isWinter = month === 11 || month <= 1;
+  const isBra = String(category).includes("bra");
+  const weatherPush = weather.temperatureC >= 20 ? "weather is warm, so swim and resort edits are elevated" : "weather is mild, so balance swim with everyday lingerie";
+
+  if (isBra) {
+    return [
+      { label: "Seasonal lead", value: isSummer ? "Bikini tops + balcony bras" : isWinter ? "T-shirt bras + smoothing layers" : "Everyday full-cup + soft balcony", note: weatherPush },
+      { label: "Trending finish", value: "Clean neutrals, soft lace, satin trims", note: "Works for editorial and ecommerce styling." },
+      { label: "Fit priority", value: "Band support first", note: "Cup style should change after band fit is stable." }
+    ];
+  }
+
+  return [
+    { label: "Seasonal lead", value: isSummer ? "Bikini bottoms + no-VPL briefs" : isWinter ? "High-waist briefs + shapewear" : "Brazilian briefs + cotton basics", note: weatherPush },
+    { label: "Trending finish", value: "Seamless, high-leg, tonal sets", note: "Keeps the result modern without overcomplicating fit." },
+    { label: "Fit priority", value: "Hip measurement first", note: "Waist matters most for high-waist and shapewear styles." }
+  ];
+}
 
 async function saveMediaOutputs(payload, folder, prefix, metadata = {}) {
   const assets = extractMediaAssets(payload);

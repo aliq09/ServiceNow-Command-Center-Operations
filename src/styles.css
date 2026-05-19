@@ -7861,10 +7861,235 @@ body {
   line-height: 1.35;
 }
 
+.commerceLivePanel {
+  display: grid;
+  gap: 14px;
+  margin: 0 24px 22px;
+  padding: 18px;
+  border: 1px solid rgba(61, 153, 112, 0.18);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 0% 0%, rgba(61, 153, 112, 0.12), transparent 35%),
+    #ffffff;
+}
+
+.commerceLivePanel.loading {
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  min-height: 96px;
+}
+
+.commerceLivePanel.loading svg {
+  color: #8a6a36;
+  animation: spin 1.2s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.commerceHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.commerceHeader div,
+.commerceLivePanel.loading div {
+  display: grid;
+  gap: 4px;
+}
+
+.commerceHeader span,
+.commerceLivePanel.loading span,
+.weatherWidget span,
+.trendFeed > span,
+.priceBoardHeader span,
+.currencyStrip span {
+  color: #8a6a36;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.commerceHeader strong,
+.commerceLivePanel.loading strong {
+  color: #171412;
+  font-size: 20px;
+  line-height: 1.1;
+}
+
+.commerceHeader small {
+  max-width: 620px;
+  color: #71685f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.commerceHeader em {
+  flex-shrink: 0;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(61, 153, 112, 0.12);
+  color: #247e55;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.currencyStrip {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.currencyStrip article {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #e8e1d7;
+  border-radius: 14px;
+  background: #fbfaf7;
+}
+
+.currencyStrip strong {
+  color: #171412;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.commerceGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 10px;
+}
+
+.weatherWidget,
+.trendFeed {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 18px;
+  background: #fbfaf7;
+  border: 1px solid #e8e1d7;
+}
+
+.weatherWidget strong {
+  color: #171412;
+  font-size: 18px;
+}
+
+.weatherWidget p {
+  margin: 0;
+  color: #625a51;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.trendFeed article {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid rgba(232, 225, 215, 0.8);
+}
+
+.trendFeed article strong {
+  color: #171412;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.trendFeed article small {
+  color: #71685f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.priceBoard {
+  display: grid;
+  gap: 10px;
+}
+
+.priceBoardHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.priceBoardHeader strong {
+  color: #171412;
+  font-size: 15px;
+}
+
+.priceBoard article {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(0, 1.2fr);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 16px;
+  background: #fbfaf7;
+  border: 1px solid #e8e1d7;
+}
+
+.priceBoard article > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.priceBoard article span {
+  color: #8a6a36;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.priceBoard article strong {
+  color: #171412;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.priceBoard article small {
+  color: #71685f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.convertedPrices {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.convertedPrices em {
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #ffffff;
+  border: 1px solid #e8e1d7;
+  color: #625a51;
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 @media (max-width: 720px) {
   .fitShopActions,
   .shopInsightGrid,
-  .shopFitChecklist {
+  .shopFitChecklist,
+  .currencyStrip,
+  .commerceGrid,
+  .priceBoard article {
     grid-template-columns: 1fr;
   }
 
@@ -7872,8 +8097,13 @@ body {
     padding-inline: 16px;
   }
 
-  .shopFitChecklist {
+  .shopFitChecklist,
+  .commerceLivePanel {
     margin-inline: 16px;
+  }
+
+  .convertedPrices {
+    justify-content: flex-start;
   }
 }
 .remeasureButton.openaiPrimary {
