@@ -6,6 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import path from "node:path";
 import "dotenv/config";
+import { GeminiVideoService } from "./services/GeminiVideoService.js";
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
@@ -71,6 +72,14 @@ const getXAI = () => {
 
 const getGeminiKey = () => process.env.GEMINI_API_KEY || "";
 const getOpenAIAdminKey = () => process.env.OPENAI_ADMIN_API_KEY || "";
+
+function getGeminiVideoService(model = geminiVideoModel) {
+  return new GeminiVideoService({
+    apiKey: getGeminiKey(),
+    model: model || geminiVideoModel,
+    logger: console
+  });
+}
 
 const GROK_MEASUREMENT_SYSTEM_PROMPT = `
 You are Grok Measurement Expert, a world-class fashion and anthropometric vision AI.
@@ -1191,25 +1200,40 @@ async function executeVideoTool(provider, prompt, { file, model, size = "1280x72
   const budgetGuard = await enforceMonthlyBudget("video", resolvedModel);
   if (provider === "gemini") {
     if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to start Gemini Veo video jobs.");
-    const video = await geminiGenerateVideo({ prompt, file, model: resolvedModel, size, seconds });
-    const costUsd = calculateAccurateCost("gemini", resolvedModel, { seconds: Number(seconds) || 8 }, "video_generation");
-    const status = extractMediaAssets(video).length ? "completed" : "queued";
-    const saved = attachCostToSaved(
-      await saveMediaOutputs(video, "videos", "gemini-video", { provider: "gemini", model: resolvedModel, costUsd, estimatedCostUsd: costUsd, status, jobType: "video_generation" }),
-      costUsd,
-      { provider: "gemini", model: resolvedModel, status, jobType: "video_generation" }
-    );
-    if (!saved.length) {
+    const requestedSeconds = Math.min(8, Math.max(4, Number(seconds) || 4));
+    const costUsd = calculateAccurateCost("gemini", resolvedModel, { seconds: requestedSeconds }, "video_generation");
+    const service = getGeminiVideoService(resolvedModel);
+    const submission = await service.submitVideoJob({ prompt, file, model: resolvedModel, size, seconds: requestedSeconds });
+    const modelUsed = submission.model || resolvedModel;
+    const job = buildVideoJob("gemini", modelUsed, { ...submission, seconds: requestedSeconds });
+    const saved = submission.status === "completed"
+      ? await saveGeminiCompletedVideo({ operationName: submission.operationName, operation: submission.operation, model: modelUsed, seconds: requestedSeconds, costUsd })
+      : [];
+    const status = saved.length ? "completed" : "queued";
+    if (status !== "completed") {
       await appendVideoJobEvent({
         provider: "gemini",
-        model: resolvedModel,
+        model: modelUsed,
         status,
-        job: buildVideoJob("gemini", resolvedModel, video),
+        job,
         costUsd,
-        message: `Gemini Veo operation ${video.operationName || "accepted"} is still running.`
+        seconds: requestedSeconds,
+        message: `Gemini Veo operation ${submission.operationName} is rendering. The app will poll and save the MP4 when ready.`
       });
     }
-    return { status, provider: "gemini", model: resolvedModel, saved, video, job: buildVideoJob("gemini", resolvedModel, video), costUsd, costPreviewUsd: budgetGuard.estimatedCostUsd, budget: await getBudgetStatus("video", resolvedModel), usage: { provider: "gemini", model: resolvedModel, costUsd, pricingSource: "local_gemini_pricing_map" } };
+    return {
+      status,
+      provider: "gemini",
+      model: modelUsed,
+      saved,
+      video: { ...submission, seconds: requestedSeconds },
+      job,
+      costUsd: status === "completed" ? costUsd : 0,
+      costPreviewUsd: budgetGuard.estimatedCostUsd,
+      budget: await getBudgetStatus("video", modelUsed),
+      usage: { provider: "gemini", model: modelUsed, costUsd: status === "completed" ? costUsd : 0, estimatedCostUsd: costUsd, units: { seconds: requestedSeconds }, pricingSource: "local_gemini_pricing_map" },
+      message: status === "completed" ? "Gemini Veo video completed and saved locally." : "Gemini Veo video job queued. Rendering continues in the background."
+    };
   }
   if (provider === "xai") {
     if (!process.env.XAI_API_KEY) throw new Error("Set XAI_API_KEY to start Grok/xAI video jobs.");
@@ -1297,17 +1321,20 @@ function normalizeOpenAIVideoSeconds(seconds = "8") {
 function buildVideoJob(provider, model, payload = {}) {
   const providerJobId = payload.id || payload.video_id || payload.request_id || payload.requestId || payload.name || payload.operationName || payload.operation?.name || "";
   if (!providerJobId) return null;
+  const seconds = Number(payload.seconds || payload.durationSeconds || payload.duration || 0);
+  const secondsParam = seconds ? `&seconds=${encodeURIComponent(seconds)}` : "";
   return {
     provider,
     model,
     providerJobId,
     status: payload.status || (payload.done ? "completed" : "queued"),
     progress: payload.progress ?? null,
-    pollUrl: `/api/video-job-status?provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model || "")}&id=${encodeURIComponent(providerJobId)}`
+    seconds: seconds || null,
+    pollUrl: `/api/video-job-status?provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model || "")}&id=${encodeURIComponent(providerJobId)}${secondsParam}`
   };
 }
 
-async function appendVideoJobEvent({ provider, model, status, job, costUsd, message }) {
+async function appendVideoJobEvent({ provider, model, status, job, costUsd, message, seconds }) {
   await appendUsageEvent({
     type: "video_generation",
     provider,
@@ -1315,6 +1342,7 @@ async function appendVideoJobEvent({ provider, model, status, job, costUsd, mess
     status,
     costUsd: status === "completed" ? costUsd : 0,
     estimatedCostUsd: costUsd,
+    units: seconds ? { seconds } : undefined,
     providerJobId: job?.providerJobId || "",
     pollUrl: job?.pollUrl || "",
     providerResponse: message
@@ -1334,10 +1362,45 @@ async function saveOpenAIVideoContent(videoId, model, costUsd = 0) {
   );
 }
 
-async function pollVideoProviderJob({ provider, model, id }) {
+async function saveGeminiCompletedVideo({ operationName, operation, model, seconds = 4, costUsd = 0 }) {
+  const video = operation?.response?.generatedVideos?.[0]?.video;
+  const service = getGeminiVideoService(model);
+  const bytes = await service.downloadCompletedVideo(video);
+  const saved = attachCostToSaved(
+    await saveRawMediaOutput(bytes, "videos", "gemini-video", "mp4", {
+      provider: "gemini",
+      model,
+      costUsd,
+      estimatedCostUsd: costUsd,
+      status: "completed",
+      jobType: "video_generation",
+      providerJobId: operationName,
+      usage: { seconds }
+    }),
+    costUsd,
+    { provider: "gemini", model, status: "completed", jobType: "video_generation", providerJobId: operationName, usage: { seconds } }
+  );
+  await appendUsageEvent({
+    type: "video_generation",
+    provider: "gemini",
+    model,
+    status: "completed",
+    costUsd,
+    estimatedCostUsd: costUsd,
+    units: { seconds },
+    providerJobId: operationName,
+    providerResponse: "Gemini Veo completed. MP4 downloaded and saved locally."
+  });
+  return saved;
+}
+
+async function pollVideoProviderJob({ provider, model, id, seconds }) {
   if (!provider || !id) throw new Error("Provider and video job id are required.");
   const resolvedModel = model || (provider === "gemini" ? geminiVideoModel : provider === "xai" ? xaiVideoModel : "sora-2");
-  const costUsd = estimateActionCost("video", resolvedModel);
+  const requestedSeconds = Math.min(8, Math.max(4, Number(seconds) || 4));
+  const costUsd = provider === "gemini"
+    ? calculateAccurateCost("gemini", resolvedModel, { seconds: requestedSeconds }, "video_generation")
+    : estimateActionCost("video", resolvedModel);
   const existingSaved = await findSavedVideoForJob(id);
   if (existingSaved.length) {
     return {
@@ -1361,16 +1424,22 @@ async function pollVideoProviderJob({ provider, model, id }) {
   }
 
   if (provider === "gemini") {
-    const operation = await getGeminiOperation(id);
-    const status = operation.done ? "completed" : "queued";
-    const saved = status === "completed"
-      ? attachCostToSaved(
-          await saveMediaOutputs(operation, "videos", "gemini-video", { provider: "gemini", model: resolvedModel, costUsd, estimatedCostUsd: costUsd, status, jobType: "video_generation", providerJobId: id }),
-          costUsd,
-          { provider: "gemini", model: resolvedModel, status, jobType: "video_generation", providerJobId: id }
-        )
+    if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to check Gemini Veo jobs.");
+    const service = getGeminiVideoService(resolvedModel);
+    const result = await service.checkVideoStatus(id);
+    const saved = result.status === "completed"
+      ? await saveGeminiCompletedVideo({ operationName: id, operation: result.operation, model: resolvedModel, seconds: requestedSeconds, costUsd })
       : [];
-    return { status: saved.length ? "completed" : status, provider, model: resolvedModel, saved, video: operation, job: buildVideoJob(provider, resolvedModel, { ...operation, operationName: id }), costUsd };
+    return {
+      status: saved.length ? "completed" : result.status,
+      provider,
+      model: resolvedModel,
+      saved,
+      video: { ...result.operation, providerJobId: id, progress: result.progress, seconds: requestedSeconds },
+      job: buildVideoJob(provider, resolvedModel, { ...result.operation, operationName: id, progress: result.progress, seconds: requestedSeconds }),
+      costUsd: saved.length ? costUsd : 0,
+      estimatedCostUsd: costUsd
+    };
   }
 
   if (provider === "xai") {
@@ -1511,6 +1580,7 @@ function providerAvailable(provider) {
 }
 
 function fallbackProviders(primary, kind = "image") {
+  if (kind === "video_generation") return [primary].filter(providerAvailable);
   const all = kind === "edit" ? ["gemini", "xai"] : ["gemini", "xai", "openai"];
   return [primary, ...all.filter((provider) => provider !== primary)].filter(providerAvailable);
 }
@@ -2124,9 +2194,9 @@ app.post("/api/generate/video", upload.single("reference"), async (req, res) => 
 });
 
 app.get("/api/video-job-status", async (req, res) => {
-  const { provider, model, id } = req.query || {};
+  const { provider, model, id, seconds } = req.query || {};
   try {
-    const result = await pollVideoProviderJob({ provider: String(provider || ""), model: String(model || ""), id: String(id || "") });
+    const result = await pollVideoProviderJob({ provider: String(provider || ""), model: String(model || ""), id: String(id || ""), seconds: String(seconds || "") });
     res.json({
       ...result,
       budget: await getBudgetStatus("video", result.model),
