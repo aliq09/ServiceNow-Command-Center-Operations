@@ -1736,6 +1736,8 @@ function App() {
               </div>
             )}
 
+            <FitShoppingAssistant fitProfile={fitProfile} onOpenGuide={setShoppingGuide} />
+
             <div className="measurementList">
               {fitProfile.measurements.map((item) => (
                 <div key={item.label} className="measurementRow">
@@ -3784,7 +3786,31 @@ function ShoppingModal({ guide, onClose }) {
             <span>{guide.eyebrow}</span>
             <h2>{guide.title}</h2>
             <p>{guide.description}</p>
+            <div className="shopFitScore">
+              <strong>{guide.matchScore}</strong>
+              <small>{guide.matchLabel}</small>
+            </div>
           </div>
+        </div>
+
+        <div className="shopInsightGrid">
+          {guide.insights.map((insight) => (
+            <article key={insight.label}>
+              <span>{insight.label}</span>
+              <strong>{insight.value}</strong>
+              <small>{insight.detail}</small>
+            </article>
+          ))}
+        </div>
+
+        <div className="shopFitChecklist">
+          <div>
+            <span>Fit checks before buying</span>
+            <strong>Use these checks on the retailer size guide</strong>
+          </div>
+          <ul>
+            {guide.fitChecks.map((check) => <li key={check}>{check}</li>)}
+          </ul>
         </div>
 
         <div className="storeGrid">
@@ -3793,16 +3819,51 @@ function ShoppingModal({ guide, onClose }) {
               <span>{product.store}</span>
               <strong>{product.name}</strong>
               <small>{product.detail}</small>
+              <em>{product.matchReason}</em>
             </a>
           ))}
         </div>
 
         <div className="modalActions">
-          <p>Availability and prices can change. Open the retailer page to confirm size, colour, delivery, and returns.</p>
+          <p>{guide.disclaimer}</p>
           <button onClick={onClose} type="button">Close</button>
         </div>
       </section>
     </div>
+  );
+}
+
+function FitShoppingAssistant({ fitProfile, onOpenGuide }) {
+  const bra = fitProfile.recommendations.find((item) => item.type === "bra");
+  const underwear = fitProfile.recommendations.find((item) => item.type === "underwear");
+  const dress = fitProfile.recommendations.find((item) => item.label === "UK Dress");
+  const hasSize = Boolean(bra && bra.value !== "--") || Boolean(underwear && underwear.value !== "--");
+
+  return (
+    <section className="fitShoppingAssistant">
+      <div className="fitShopHeader">
+        <div>
+          <span>Fit-to-shop assistant</span>
+          <strong>Find UK size matches from this measurement scan</strong>
+        </div>
+        <em>{hasSize ? "Ready" : "Needs scan"}</em>
+      </div>
+      <div className="fitShopActions">
+        <button type="button" disabled={!bra || bra.value === "--"} onClick={() => onOpenGuide(buildShoppingGuide(bra, fitProfile))}>
+          <Shirt size={16} />
+          <span>Shop bra fit</span>
+          <strong>{bra?.value || "--"}</strong>
+        </button>
+        <button type="button" disabled={!underwear || underwear.value === "--"} onClick={() => onOpenGuide(buildShoppingGuide(underwear, fitProfile))}>
+          <Sparkles size={16} />
+          <span>Shop underwear fit</span>
+          <strong>{underwear?.value || "--"}</strong>
+        </button>
+      </div>
+      <p>
+        Dress guide: <strong>{dress?.value || "--"}</strong>. The links open retailer searches, not scraped pages, so prices and stock are confirmed directly by the store.
+      </p>
+    </section>
   );
 }
 
@@ -4175,63 +4236,118 @@ function compactMessage(message = "") {
 }
 
 function buildShoppingGuide(item, fitProfile) {
+  const hip = getMeasurementByLabel(fitProfile, "Hip");
+  const bust = getMeasurementByLabel(fitProfile, "Bust");
+  const underbust = getMeasurementByLabel(fitProfile, "Underbust");
+  const waist = getMeasurementByLabel(fitProfile, "Waist");
+  const confidence = fitProfile.confidenceScore ? `${fitProfile.confidenceScore}%` : "visual estimate";
+
   if (item.type === "bra") {
+    const searchQuery = `${item.value} bra`;
     return {
-      eyebrow: "UK local store preview",
-      title: "Bra options near UK high street retailers",
+      eyebrow: "UK fit-to-shop recommendation",
+      title: "Bra matches for this measurement scan",
       size: item.value,
       videoLabel: "Bra fit preview",
-      description: `Suggested starting point: ${item.value}. Compare full cup, balcony, non-wired, and T-shirt styles depending on the garment silhouette.`,
+      matchScore: confidence,
+      matchLabel: "AI measurement confidence",
+      description: `Suggested starting point: ${item.value}. Compare band comfort, cup coverage, and centre-front position before selecting the final style.`,
+      insights: [
+        { label: "Recommended UK size", value: item.value, detail: "Start here, then confirm against the retailer size guide." },
+        { label: "Bust", value: bust?.metric || "--", detail: bust?.imperial || "Needed for cup check." },
+        { label: "Underbust", value: underbust?.metric || "--", detail: underbust?.imperial || "Needed for band check." }
+      ],
+      fitChecks: [
+        "Band should sit level around the body without riding up.",
+        "Cup should contain the bust without gaping or cutting in.",
+        "Try sister sizes if the cup fits but the band feels too loose or too firm."
+      ],
       products: [
         {
           store: "M&S",
-          name: "Shop all bras",
-          detail: "Includes full cup, non-wired, larger cup, and everyday styles.",
-          href: "https://www.marksandspencer.com/l/lingerie/hidden/fs5/bras"
+          name: `${item.value} bra search`,
+          detail: "High-street basics, full cup, non-wired, T-shirt, and multipack styles.",
+          matchReason: "Best broad UK high-street starting point for band and cup searches.",
+          href: buildRetailSearchUrl("marks", searchQuery)
         },
         {
           store: "John Lewis",
-          name: "Women's bras",
+          name: `${item.value} branded bras`,
           detail: "Includes Triumph, Fantasie, Chantelle, and more UK delivery options.",
-          href: "https://www.johnlewis.com/browse/women/womens-lingerie-underwear/bras/_/N-fkaZnnwt"
+          matchReason: "Useful when the user wants more brand and cup-shape variety.",
+          href: buildRetailSearchUrl("johnlewis", searchQuery)
         },
         {
-          store: "John Lewis",
-          name: "New-in bras",
-          detail: "Useful for styling fresh seasonal lingerie looks.",
-          href: "https://www.johnlewis.com/browse/women/womens-lingerie-underwear/view-all-womens-lingerie-underwear/bras/new-in/_/N-fkfZ47knZ7lhg"
+          store: "Next",
+          name: `${item.value} everyday bras`,
+          detail: "Practical daily-wear options, sets, and easy UK returns.",
+          matchReason: "Good for fast availability checks and everyday styling options.",
+          href: buildRetailSearchUrl("next", searchQuery)
         }
-      ]
+      ],
+      disclaimer: "Retailer search results are opened directly. Confirm current stock, price, returns, and exact size chart before buying."
     };
   }
 
+  const briefSize = item.value.replace("/", " ");
+  const searchQuery = `${briefSize} knickers briefs`;
   return {
-    eyebrow: "UK local store preview",
-    title: "Underwear options for the recommended size",
+    eyebrow: "UK fit-to-shop recommendation",
+    title: "Underwear matches for this measurement scan",
     size: item.value,
     videoLabel: "Underwear fit preview",
-    description: `Suggested starting point: ${item.value}. Use the hip measurement ${fitProfile.measurements.find((measurement) => measurement.label === "Hip")?.imperial || ""} to compare briefs, bikini, high-leg, and no-VPL cuts.`,
+    matchScore: confidence,
+    matchLabel: "AI measurement confidence",
+    description: `Suggested starting point: ${item.value}. Use hip and waist measurements to compare briefs, bikini, high-leg, no-VPL, and shapewear cuts.`,
+    insights: [
+      { label: "Recommended UK size", value: item.value, detail: "Start here, then check each retailer's size guide." },
+      { label: "Hip", value: hip?.metric || "--", detail: hip?.imperial || "Primary underwear fit measurement." },
+      { label: "Waist", value: waist?.metric || "--", detail: waist?.imperial || "Useful for high-waist styles." }
+    ],
+    fitChecks: [
+      "For briefs and bikini cuts, prioritise the hip measurement.",
+      "For high-waist or shapewear styles, also compare the waist measurement.",
+      "If between two sizes, choose based on fabric stretch and desired compression."
+    ],
     products: [
       {
         store: "M&S",
-        name: "Shop all knickers",
+        name: `${item.value} knickers search`,
         detail: "Everyday multipacks, cotton-rich briefs, lace, Brazilian, and high-leg cuts.",
-        href: "https://www.marksandspencer.com/l/lingerie/knickers"
-      },
-      {
-        store: "M&S",
-        name: "Stoma-friendly knickers",
-        detail: "Inclusive UK high-street underwear range for specialist comfort needs.",
-        href: "https://www.marksandspencer.com/content/stoma-underwear"
+        matchReason: "Strong UK baseline for multipacks, no-VPL, cotton, and everyday sizing.",
+        href: buildRetailSearchUrl("marks", searchQuery)
       },
       {
         store: "John Lewis",
-        name: "Women's lingerie and underwear",
+        name: `${item.value} lingerie and briefs`,
         detail: "Browse briefs, shapewear, lingerie sets, and branded underwear.",
-        href: "https://www.johnlewis.com/women/womens-lingerie-underwear/c600001812"
+        matchReason: "Good when the user wants branded cuts and premium fabric options.",
+        href: buildRetailSearchUrl("johnlewis", searchQuery)
+      },
+      {
+        store: "Next",
+        name: `${item.value} underwear search`,
+        detail: "Easy UK size filtering across briefs, thongs, multipacks, and shapewear.",
+        matchReason: "Good for quick alternatives and modern high-street silhouettes.",
+        href: buildRetailSearchUrl("next", searchQuery)
       }
-    ]
+    ],
+    disclaimer: "Retailer search results are opened directly. Confirm current stock, price, returns, and exact size chart before buying."
   };
+}
+
+function getMeasurementByLabel(fitProfile, label) {
+  return fitProfile.measurements.find((measurement) => measurement.label === label);
+}
+
+function buildRetailSearchUrl(retailer, query) {
+  const encoded = encodeURIComponent(query);
+  const urls = {
+    marks: `https://www.marksandspencer.com/MSFindItemsByKeyword?searchTerm=${encoded}`,
+    johnlewis: `https://www.johnlewis.com/search?search-term=${encoded}`,
+    next: `https://www.next.co.uk/search?w=${encoded}`
+  };
+  return urls[retailer] || `https://www.google.com/search?q=${encoded}`;
 }
 
 const rootElement = document.getElementById("root");

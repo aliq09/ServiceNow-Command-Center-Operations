@@ -7621,6 +7621,261 @@ body {
 .remeasureActions .remeasureButton {
   margin-bottom: 0;
 }
+
+/* Measurement fit-to-shop assistant */
+.fitShoppingAssistant {
+  display: grid;
+  gap: 12px;
+  margin: 12px 0;
+  padding: 14px;
+  border: 1px solid rgba(201, 165, 92, 0.18);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(201, 165, 92, 0.12), rgba(61, 153, 112, 0.06)),
+    var(--card, #fffdfb);
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(26, 22, 18, 0.05));
+}
+
+.fitShopHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.fitShopHeader div {
+  display: grid;
+  gap: 3px;
+}
+
+.fitShopHeader span {
+  color: var(--primary);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.fitShopHeader strong {
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.fitShopHeader em {
+  flex-shrink: 0;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(61, 153, 112, 0.12);
+  color: var(--accent);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fitShopActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fitShopActions button {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  align-items: center;
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.66);
+  color: var(--foreground);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--duration-base, 200ms) var(--ease-out, ease),
+    box-shadow var(--duration-base, 200ms) var(--ease-out, ease),
+    transform var(--duration-fast, 120ms) var(--ease-out, ease);
+}
+
+.fitShopActions button:hover:not(:disabled),
+.fitShopActions button:focus-visible:not(:disabled) {
+  border-color: rgba(201, 165, 92, 0.45);
+  box-shadow: 0 10px 26px rgba(26, 22, 18, 0.08);
+  transform: translateY(-1px);
+}
+
+.fitShopActions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.fitShopActions svg {
+  grid-row: 1 / span 2;
+  color: var(--primary);
+}
+
+.fitShopActions span {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.fitShopActions strong {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.fitShoppingAssistant p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.fitShoppingAssistant p strong {
+  color: var(--foreground);
+}
+
+.shopFitScore {
+  width: fit-content;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 9px 12px;
+  border: 1px solid rgba(61, 153, 112, 0.18);
+  border-radius: 999px;
+  background: rgba(61, 153, 112, 0.1);
+}
+
+.shopFitScore strong {
+  color: var(--accent);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.shopFitScore small {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.shopInsightGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  padding: 18px 24px 0;
+}
+
+.shopInsightGrid article {
+  display: grid;
+  gap: 5px;
+  padding: 13px;
+  border: 1px solid #e8e1d7;
+  border-radius: 16px;
+  background: #ffffff;
+}
+
+.shopInsightGrid span,
+.shopFitChecklist span {
+  color: #8a6a36;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.shopInsightGrid strong {
+  color: #171412;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.shopInsightGrid small {
+  color: #71685f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.shopFitChecklist {
+  display: grid;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1fr);
+  gap: 16px;
+  margin: 12px 24px 18px;
+  padding: 16px;
+  border: 1px solid rgba(201, 165, 92, 0.22);
+  border-radius: 18px;
+  background: linear-gradient(135deg, rgba(201, 165, 92, 0.12), rgba(255, 255, 255, 0.72));
+}
+
+.shopFitChecklist div {
+  display: grid;
+  align-content: start;
+  gap: 5px;
+}
+
+.shopFitChecklist strong {
+  color: #171412;
+  font-size: 15px;
+  line-height: 1.2;
+}
+
+.shopFitChecklist ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.shopFitChecklist li {
+  position: relative;
+  padding-left: 18px;
+  color: #625a51;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.shopFitChecklist li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #c9a55c;
+}
+
+.storeCard em {
+  display: block;
+  margin-top: auto;
+  padding-top: 10px;
+  color: #247e55;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+@media (max-width: 720px) {
+  .fitShopActions,
+  .shopInsightGrid,
+  .shopFitChecklist {
+    grid-template-columns: 1fr;
+  }
+
+  .shopInsightGrid {
+    padding-inline: 16px;
+  }
+
+  .shopFitChecklist {
+    margin-inline: 16px;
+  }
+}
 .remeasureButton.openaiPrimary {
   background: rgba(74, 157, 124, .12);
   border-color: rgba(74, 157, 124, .24);
