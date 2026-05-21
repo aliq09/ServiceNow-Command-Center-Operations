@@ -6,6 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import path from "node:path";
 import "dotenv/config";
+import { GeminiOmniProvider, isGeminiOmniModel } from "./services/GeminiOmniProvider.js";
 import { GeminiVideoService } from "./services/GeminiVideoService.js";
 
 const app = express();
@@ -77,6 +78,15 @@ function getGeminiVideoService(model = geminiVideoModel) {
   return new GeminiVideoService({
     apiKey: getGeminiKey(),
     model: model || geminiVideoModel,
+    logger: console
+  });
+}
+
+function getGeminiOmniProvider(model = "gemini-omni-flash") {
+  return new GeminiOmniProvider({
+    apiKey: getGeminiKey(),
+    model,
+    enabled: process.env.GEMINI_OMNI_ENABLED === "true",
     logger: console
   });
 }
@@ -1200,6 +1210,48 @@ async function executeVideoTool(provider, prompt, { file, model, size = "1280x72
   const budgetGuard = await enforceMonthlyBudget("video", resolvedModel);
   if (provider === "gemini") {
     if (!getGeminiKey()) throw new Error("Set GEMINI_API_KEY to start Gemini Veo video jobs.");
+    if (isGeminiOmniModel(resolvedModel)) {
+      const requestedSeconds = Math.min(10, Math.max(4, Number(seconds) || 10));
+      const omni = getGeminiOmniProvider(resolvedModel);
+      try {
+        const submission = await omni.submitOmniVideoJob({ prompt, files: file ? [file] : [], model: resolvedModel, size, seconds: requestedSeconds });
+        const job = buildVideoJob("gemini", submission.model || resolvedModel, { ...submission, seconds: requestedSeconds });
+        await appendVideoJobEvent({
+          provider: "gemini",
+          model: submission.model || resolvedModel,
+          status: "queued",
+          job,
+          costUsd: 0,
+          seconds: requestedSeconds,
+          message: "Gemini Omni Flash video job accepted. The app will poll and save the result when Google returns the MP4."
+        });
+        return {
+          status: "queued",
+          provider: "gemini",
+          model: submission.model || resolvedModel,
+          saved: [],
+          video: { ...submission, seconds: requestedSeconds, omniReady: true },
+          job,
+          costUsd: 0,
+          costPreviewUsd: 0,
+          budget: await getBudgetStatus("video", resolvedModel),
+          usage: { provider: "gemini", model: submission.model || resolvedModel, costUsd: 0, estimatedCostUsd: 0, units: { seconds: requestedSeconds }, pricingSource: "pending_gemini_omni_pricing" },
+          message: "Gemini Omni Flash video job queued."
+        };
+      } catch (error) {
+        await appendUsageEvent({
+          type: "video_generation",
+          provider: "gemini",
+          model: resolvedModel,
+          status: "blocked",
+          costUsd: 0,
+          estimatedCostUsd: 0,
+          units: { seconds: requestedSeconds },
+          providerResponse: error.message || "Gemini Omni Flash is not available yet."
+        });
+        throw error;
+      }
+    }
     const requestedSeconds = Math.min(8, Math.max(4, Number(seconds) || 4));
     const costUsd = calculateAccurateCost("gemini", resolvedModel, { seconds: requestedSeconds }, "video_generation");
     const service = getGeminiVideoService(resolvedModel);
@@ -1611,6 +1663,7 @@ async function executeWithProviderFallback(kind, primaryProvider, runner) {
 }
 
 function statusForError(error, fallback = 500) {
+  if (Number(error?.status)) return Number(error.status);
   return /Monthly budget/i.test(error?.message || "") ? 402 : fallback;
 }
 
@@ -2205,6 +2258,26 @@ app.get("/api/video-job-status", async (req, res) => {
   } catch (error) {
     res.status(statusForError(error)).json({ error: error.message || "Video job status failed." });
   }
+});
+
+app.get("/api/gemini/omni/capabilities", (_req, res) => {
+  res.json({
+    provider: "gemini",
+    model: "gemini-omni-flash",
+    status: process.env.GEMINI_OMNI_ENABLED === "true" ? "enabled" : "api_pending",
+    enabled: process.env.GEMINI_OMNI_ENABLED === "true",
+    supports: {
+      prompt: true,
+      referenceImages: 5,
+      sourceVideo: true,
+      voiceReference: true,
+      conversationalVideoEditing: true,
+      asyncPolling: true
+    },
+    message: process.env.GEMINI_OMNI_ENABLED === "true"
+      ? "Gemini Omni provider is enabled by environment flag."
+      : "Gemini Omni Flash is prepared in the app architecture, but the developer API is not enabled here yet."
+  });
 });
 
 app.post("/api/analyze/image", upload.single("reference"), async (req, res) => {

@@ -104,7 +104,10 @@ const videoModelOptions = {
     { value: "sora-2-pro", label: "Sora 2 Pro" }
   ],
   xai: [{ value: "grok-imagine-video", label: "Grok Imagine" }],
-  gemini: [{ value: "veo-3.1-generate-preview", label: "Veo 3.1" }]
+  gemini: [
+    { value: "veo-3.1-generate-preview", label: "Veo 3.1" },
+    { value: "gemini-omni-flash", label: "Omni Flash (API pending)" }
+  ]
 };
 
 const editModelOptions = {
@@ -152,6 +155,7 @@ const providerFilterOptions = [
 ];
 
 function previewActionCost(type, model = "") {
+  if (String(model || "").includes("omni")) return 0;
   if (String(model || "").startsWith("veo")) return 1.6;
   if (String(model || "").startsWith("imagen")) return 0.04;
   if (String(model || "").includes("flash-image")) return 0.039;
@@ -716,15 +720,27 @@ function App() {
           return;
         }
 
-        setOperation({
-          type: "Video generation",
-          provider: providerLabel(result.provider || provider),
-          model: result.model || model,
-          status: result.status || "queued",
-          step: 2,
-          message: "Video is still rendering with the provider."
-        });
-        setProgressOverlay((current) => current ? { ...current, label: "Rendering", progress } : current);
+        if (result.video?.omniReady || String(result.model || model).includes("omni")) {
+          setOperation({
+            type: "Video generation",
+            provider: providerLabel(result.provider || provider),
+            model: result.model || model,
+            status: result.status || "queued",
+            step: 2,
+            message: "Gemini Omni job is prepared. The developer API is pending, so no credits were spent."
+          });
+          setProgressOverlay((current) => current ? { ...current, label: "Omni-ready", progress } : current);
+        } else {
+          setOperation({
+            type: "Video generation",
+            provider: providerLabel(result.provider || provider),
+            model: result.model || model,
+            status: result.status || "queued",
+            step: 2,
+            message: "Video is still rendering with the provider."
+          });
+          setProgressOverlay((current) => current ? { ...current, label: "Rendering", progress } : current);
+        }
       } catch (error) {
         setOperation({
           type: "Video generation",
