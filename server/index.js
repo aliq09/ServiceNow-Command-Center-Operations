@@ -6,6 +6,7 @@ import multer from "multer";
 import OpenAI from "openai";
 import path from "node:path";
 import "dotenv/config";
+import { buildLiveSessionConfig, GeminiOmniLiveService, normalizeLiveModality } from "./services/GeminiOmniLiveService.js";
 import { GeminiOmniProvider, isGeminiOmniModel } from "./services/GeminiOmniProvider.js";
 import { GeminiVideoService } from "./services/GeminiVideoService.js";
 
@@ -87,6 +88,14 @@ function getGeminiOmniProvider(model = "gemini-omni-flash") {
     apiKey: getGeminiKey(),
     model,
     enabled: process.env.GEMINI_OMNI_ENABLED === "true",
+    logger: console
+  });
+}
+
+function getGeminiOmniLiveService() {
+  return new GeminiOmniLiveService({
+    apiKey: getGeminiKey(),
+    enabled: process.env.GEMINI_LIVE_ENABLED === "true",
     logger: console
   });
 }
@@ -2261,6 +2270,7 @@ app.get("/api/video-job-status", async (req, res) => {
 });
 
 app.get("/api/gemini/omni/capabilities", (_req, res) => {
+  const liveEnabled = process.env.GEMINI_LIVE_ENABLED === "true";
   res.json({
     provider: "gemini",
     model: "gemini-omni-flash",
@@ -2272,12 +2282,65 @@ app.get("/api/gemini/omni/capabilities", (_req, res) => {
       sourceVideo: true,
       voiceReference: true,
       conversationalVideoEditing: true,
-      asyncPolling: true
+      asyncPolling: true,
+      liveStreaming: liveEnabled
+    },
+    live: {
+      status: liveEnabled ? "enabled" : "prepared",
+      model: process.env.GEMINI_LIVE_MODEL || "gemini-live-2.5-flash-preview",
+      responseModalities: ["TEXT", "AUDIO"],
+      outputRule: "Use one response modality per Live session.",
+      realtimeInputs: ["text", "audio/pcm", "image/jpeg frames"],
+      serverSideOnly: true
     },
     message: process.env.GEMINI_OMNI_ENABLED === "true"
       ? "Gemini Omni provider is enabled by environment flag."
       : "Gemini Omni Flash is prepared in the app architecture, but the developer API is not enabled here yet."
   });
+});
+
+app.get("/api/gemini/omni/live/capabilities", (_req, res) => {
+  const enabled = process.env.GEMINI_LIVE_ENABLED === "true";
+  res.json({
+    provider: "gemini",
+    capability: "live_multimodal_stream",
+    status: enabled ? "enabled" : "prepared",
+    enabled,
+    defaultModel: process.env.GEMINI_LIVE_MODEL || "gemini-live-2.5-flash-preview",
+    sdk: {
+      package: "@google/genai",
+      connection: "client.live.connect",
+      eventCallbacks: ["onopen", "onmessage", "onerror", "onclose"]
+    },
+    responseModalities: ["TEXT", "AUDIO"],
+    rule: "Create one Live session per selected output modality. Do not request text and audio in the same session.",
+    inputs: {
+      text: "sendClientContent",
+      audio: "sendRealtimeInput({ audio })",
+      imageFrames: "sendRealtimeInput({ media })"
+    },
+    security: "Gemini API key remains server-side. A browser UI should connect through a server WebSocket proxy or ephemeral Live token flow."
+  });
+});
+
+app.post("/api/gemini/omni/live/session-config", (req, res) => {
+  try {
+    const { model, responseModality = "TEXT", systemInstruction } = req.body || {};
+    const normalized = normalizeLiveModality(responseModality);
+    const config = buildLiveSessionConfig({
+      model: model || process.env.GEMINI_LIVE_MODEL || "gemini-live-2.5-flash-preview",
+      responseModality: normalized,
+      systemInstruction: systemInstruction || "You are a helpful fashion creative studio assistant."
+    });
+    res.json({
+      status: "prepared",
+      enabled: process.env.GEMINI_LIVE_ENABLED === "true",
+      config,
+      nextStep: "Use this config from a server-side WebSocket proxy. REST cannot hold a low-latency bidirectional Gemini Live session for the browser."
+    });
+  } catch (error) {
+    res.status(statusForError(error)).json({ error: error.message || "Gemini Live config failed." });
+  }
 });
 
 app.post("/api/analyze/image", upload.single("reference"), async (req, res) => {
