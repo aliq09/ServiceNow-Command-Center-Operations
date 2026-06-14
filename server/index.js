@@ -26,6 +26,8 @@ const geminiVideoModel = process.env.GEMINI_VIDEO_MODEL || "veo-3.1-generate-pre
 const orchestrationModel = process.env.OPENAI_ORCHESTRATION_MODEL || "gpt-5.2";
 const minimalStylingMaxAttempts = 2;
 const minimalStylingCostEstimate = 0.02;
+const swimwearFitMaxAttempts = 2;
+const swimwearFitCostEstimate = 0.07;
 const MONTHLY_BUDGET_USD = Number(process.env.MONTHLY_BUDGET_USD || 5);
 const CURRENT_MONTH = new Date().toISOString().slice(0, 7);
 const MEASUREMENT_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
@@ -2255,6 +2257,177 @@ app.post("/api/generate/video", upload.single("reference"), async (req, res) => 
   }
 });
 
+app.post("/api/swimwear-fit", upload.single("reference"), async (req, res) => {
+  const { model = "grok-imagine-image-pro", quality = "high", size = "auto", userPrompt = "" } = req.body || {};
+  const requestId = cryptoRandomId("swimwear-fit");
+  const provider = "xai";
+  const startedAt = new Date().toISOString();
+  const events = [];
+
+  if (!req.file) {
+    res.status(400).json({ error: "A model reference image is required for Swimwear Fit Studio." });
+    return;
+  }
+
+  if (!process.env.XAI_API_KEY) {
+    res.status(202).json({
+      status: "ready_for_xai_key",
+      requestId,
+      message: "Set XAI_API_KEY to run Grok precheck and swimwear image editing.",
+      request: { provider, model, quality, size }
+    });
+    return;
+  }
+
+  try {
+    events.push(buildSwimwearFitEvent(requestId, "request", "accepted", {
+      provider,
+      model,
+      promptVariant: "intake",
+      providerResponse: "Image attached. Grok safety and fit precheck starting.",
+      estimatedCostUsd: 0
+    }));
+
+    const plan = await createSwimwearFitPlan({ file: req.file, userPrompt, model });
+    events.push(buildSwimwearFitEvent(requestId, "precheck", plan.allowed ? "allowed" : "blocked", {
+      provider,
+      model: plan.precheckModel || xaiMeasurementModel,
+      promptVariant: "grok_precheck",
+      providerResponse: plan.userMessage,
+      rejectionReason: plan.allowed ? "" : plan.blockReason,
+      estimatedCostUsd: 0
+    }));
+
+    if (!plan.allowed) {
+      await persistSwimwearFitLog(events, { requestId, finalStatus: "blocked", startedAt });
+      res.json({
+        status: "blocked",
+        requestId,
+        provider,
+        model,
+        finalOutcome: "blocked",
+        message: plan.userMessage,
+        rejectionReason: plan.blockReason,
+        attempts: [],
+        saved: [],
+        plan,
+        events
+      });
+      return;
+    }
+
+    const prompts = [plan.primaryPrompt, plan.fallbackPrompt].filter(Boolean).slice(0, swimwearFitMaxAttempts);
+    const attempts = [];
+
+    for (const [index, prompt] of prompts.entries()) {
+      const attemptNumber = index + 1;
+      const promptVariant = attemptNumber === 1 ? "primary_bikini" : "fallback_swimwear";
+      events.push(buildSwimwearFitEvent(requestId, "attempt", "sent", {
+        provider,
+        model,
+        promptVariant,
+        prompt,
+        providerResponse: `Attempt ${attemptNumber} sent to Grok image edit.`,
+        estimatedCostUsd: swimwearFitCostEstimate
+      }));
+
+      try {
+        const result = await executeXaiImageEditTool(req.file, prompt, { model, quality, size });
+        const attemptCost = result.costUsd || calculateAccurateCost("xai", result.model || model, {}, "image_edit");
+        attempts.push({
+          attempt: attemptNumber,
+          promptVariant,
+          status: "succeeded",
+          prompt,
+          providerMessage: "Grok returned swimwear fit media.",
+          costUsd: attemptCost,
+          saved: result.saved || []
+        });
+        events.push(buildSwimwearFitEvent(requestId, "attempt", "succeeded", {
+          provider,
+          model: result.model || model,
+          promptVariant,
+          prompt,
+          providerResponse: "Grok returned swimwear fit media.",
+          estimatedCostUsd: attemptCost,
+          costUsd: attemptCost
+        }));
+        await persistSwimwearFitLog(events, { requestId, finalStatus: "generated", startedAt });
+        res.json({
+          status: "completed",
+          requestId,
+          provider,
+          model: result.model || model,
+          finalOutcome: "generated",
+          message: "Swimwear Fit Studio completed and saved locally.",
+          costUsd: attemptCost,
+          attempts,
+          saved: result.saved || [],
+          plan,
+          events
+        });
+        return;
+      } catch (error) {
+        const providerMessage = error.message || "Grok rejected or failed the swimwear edit request.";
+        const rejected = isProviderRejection(providerMessage);
+        attempts.push({
+          attempt: attemptNumber,
+          promptVariant,
+          status: rejected ? "rejected" : "failed",
+          prompt,
+          providerMessage,
+          rejectionReason: rejected ? providerMessage : ""
+        });
+        events.push(buildSwimwearFitEvent(requestId, "attempt", rejected ? "rejected" : "failed", {
+          provider,
+          model,
+          promptVariant,
+          prompt,
+          providerResponse: providerMessage,
+          rejectionReason: rejected ? providerMessage : "",
+          estimatedCostUsd: swimwearFitCostEstimate
+        }));
+      }
+    }
+
+    await persistSwimwearFitLog(events, { requestId, finalStatus: "stopped", startedAt });
+    res.status(422).json({
+      status: "stopped",
+      requestId,
+      provider,
+      model,
+      finalOutcome: "stopped",
+      message: "Swimwear Fit Studio stopped after two compliant attempts. No extra retries were made.",
+      attempts,
+      saved: [],
+      plan,
+      events
+    });
+  } catch (error) {
+    const message = error.message || "Swimwear Fit Studio failed.";
+    events.push(buildSwimwearFitEvent(requestId, "request", "failed", {
+      provider,
+      model,
+      promptVariant: "system",
+      providerResponse: message,
+      rejectionReason: isProviderRejection(message) ? message : "",
+      estimatedCostUsd: 0
+    }));
+    await persistSwimwearFitLog(events, { requestId, finalStatus: "failed", startedAt });
+    res.status(statusForError(error)).json({
+      status: "failed",
+      requestId,
+      provider,
+      model,
+      finalOutcome: "failed",
+      message,
+      attempts: [],
+      saved: [],
+      events
+    });
+  }
+});
+
 app.get("/api/video-job-status", async (req, res) => {
   const { provider, model, id, seconds } = req.query || {};
   try {
@@ -2836,6 +3009,116 @@ function looksUnsafeStylingPrompt(prompt = "") {
   ].some((term) => lower.includes(term));
 }
 
+async function createSwimwearFitPlan({ file, userPrompt = "", model = xaiImageModel }) {
+  const xai = getXAI();
+  if (!xai) throw new Error("XAI_API_KEY is required for Grok Swimwear Fit precheck.");
+
+  const response = await xai.chat.completions.create({
+    model: xaiMeasurementModel,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are Grok Swimwear Fit Safety Planner for a public fashion image editing app. " +
+          "Inspect the uploaded image and the user request before any image-edit provider call. " +
+          "Allow only adult, tasteful, non-explicit swimwear, bikini, resortwear, or fashion-catalog transformations. " +
+          "Block if the person appears under 18, age is uncertain or childlike, or the request asks for nudity, lingerie, underwear, fetish, erotic, explicit, transparent clothing, sexualized posing, or moderation bypass. " +
+          "If safe, produce one primary prompt for a fashionable bikini/swimwear edit and one fallback prompt for a more conservative one-piece/resort swimwear edit. " +
+          "Prompts must preserve face, identity, pose, body proportions, realistic fabric, and a professional editorial/e-commerce style. " +
+          "Return ONLY valid JSON: {\"allowed\":boolean,\"riskLevel\":\"low|medium|high\",\"blockReason\":\"\",\"userMessage\":\"\",\"primaryPrompt\":\"\",\"fallbackPrompt\":\"\",\"safeAlternatives\":[\"...\"],\"precheckModel\":\"grok-4.20-0309-reasoning\"}."
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text:
+              `User request: ${userPrompt || "One-click Swimwear Fit Studio: create tasteful adult bikini/swimwear fashion styling."}\n` +
+              `Target edit model: ${model}.\n` +
+              `Image metadata: filename=${file.originalname}, mime=${file.mimetype}, bytes=${file.size}.\n` +
+              "Decide whether this is safe and produce provider-ready prompts only when safe."
+          },
+          {
+            type: "image_url",
+            image_url: { url: `data:${file.mimetype};base64,${file.buffer.toString("base64")}` }
+          }
+        ]
+      }
+    ],
+    temperature: 0,
+    max_tokens: 900
+  });
+
+  return normalizeSwimwearFitPlan(parseJsonObject(extractOutputText(response)));
+}
+
+function normalizeSwimwearFitPlan(raw = {}) {
+  const rawPrompts = `${raw.primaryPrompt || ""} ${raw.fallbackPrompt || ""}`;
+  const requestedAllowed = raw.allowed === true;
+  const unsafePrompt = looksUnsafeSwimwearPrompt(rawPrompts);
+  const allowed = requestedAllowed && !unsafePrompt;
+  const safeAlternatives = Array.isArray(raw.safeAlternatives) ? raw.safeAlternatives.slice(0, 4) : [];
+  return {
+    allowed,
+    riskLevel: ["low", "medium", "high"].includes(raw.riskLevel) ? raw.riskLevel : allowed ? "low" : "high",
+    blockReason: allowed ? "" : raw.blockReason || "This image or request is not safe for a swimwear edit.",
+    userMessage: raw.userMessage || (allowed
+      ? "Grok precheck approved a tasteful adult swimwear fashion edit."
+      : "Grok precheck blocked this before any image generation call."),
+    primaryPrompt: allowed ? enforceSafeSwimwearPrompt(raw.primaryPrompt, "primary") : "",
+    fallbackPrompt: allowed ? enforceSafeSwimwearPrompt(raw.fallbackPrompt, "fallback") : "",
+    estimatedCostUsd: swimwearFitCostEstimate,
+    safeAlternatives: safeAlternatives.length ? safeAlternatives : [
+      "Try a tasteful resortwear editorial look.",
+      "Try a one-piece swimwear catalog edit.",
+      "Try summer fashion styling with natural coverage."
+    ],
+    precheckModel: raw.precheckModel || xaiMeasurementModel
+  };
+}
+
+function enforceSafeSwimwearPrompt(prompt, variant = "primary") {
+  const base = String(prompt || "").trim();
+  const fallback = variant === "fallback"
+    ? "Create a tasteful adult one-piece swimwear or resortwear fashion edit in a professional catalog style. Preserve the same person, face, identity, pose, body proportions, realistic fabric, and natural non-explicit coverage."
+    : "Create a tasteful adult bikini swimwear fashion edit in a premium editorial/e-commerce style. Preserve the same person, face, identity, pose, body proportions, realistic fabric, and natural non-explicit coverage.";
+  const safe = looksUnsafeSwimwearPrompt(base) ? fallback : base || fallback;
+  return `${safe} Use adult fashion-catalog swimwear presentation only. No nudity, lingerie, fetish styling, transparent clothing, sexualized pose, explicit content, or moderation-bypass language.`;
+}
+
+function looksUnsafeSwimwearPrompt(prompt = "") {
+  const lower = prompt.toLowerCase();
+  return [
+    "nude",
+    "naked",
+    "topless",
+    "see through",
+    "see-through",
+    "transparent clothing",
+    "transparent dress",
+    "lingerie",
+    "underwear",
+    "panty",
+    "panties",
+    "thong",
+    "g-string",
+    "sexual",
+    "erotic",
+    "fetish",
+    "spicy",
+    "provocative",
+    "seductive",
+    "bypass",
+    "ignore safety",
+    "minor",
+    "underage",
+    "teen",
+    "child",
+    "schoolgirl",
+    "young-looking"
+  ].some((term) => lower.includes(term));
+}
+
 function isProviderRejection(message = "") {
   const lower = message.toLowerCase();
   return ["policy", "safety", "moderation", "rejected", "not allowed", "unsafe", "blocked", "content"].some((term) => lower.includes(term));
@@ -2861,6 +3144,30 @@ function buildMinimalStylingEvent(requestId, stage, status, detail = {}) {
 async function persistMinimalStylingLog(events, summary) {
   if (!events.length) return;
   await appendManifest(events.map((event) => ({ ...event, type: "minimal-styling-log", summary })));
+  await logMinimalStylingToSupabase(events, summary);
+}
+
+function buildSwimwearFitEvent(requestId, stage, status, detail = {}) {
+  return {
+    requestId,
+    feature: "swimwear_fit",
+    stage,
+    status,
+    provider: detail.provider || "",
+    model: detail.model || "",
+    promptVariant: detail.promptVariant || "",
+    prompt: detail.prompt || "",
+    providerResponse: detail.providerResponse || "",
+    rejectionReason: detail.rejectionReason || "",
+    estimatedCostUsd: Number(detail.estimatedCostUsd || 0),
+    costUsd: Number(detail.costUsd || detail.estimatedCostUsd || 0),
+    timestamp: new Date().toISOString()
+  };
+}
+
+async function persistSwimwearFitLog(events, summary) {
+  if (!events.length) return;
+  await appendManifest(events.map((event) => ({ ...event, type: "swimwear-fit-log", summary })));
   await logMinimalStylingToSupabase(events, summary);
 }
 

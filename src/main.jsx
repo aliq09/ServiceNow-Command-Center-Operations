@@ -24,6 +24,7 @@ import {
   Shirt,
   Ruler,
   ScanLine,
+  ShieldCheck,
   Sparkles,
   Tag,
   Upload,
@@ -122,6 +123,7 @@ const workspaceModes = [
   { id: "measure", label: "Measure", title: "Measurement Review", cta: "Ask OpenAI + measure", icon: Ruler },
   { id: "image", label: "Image", title: "Image Studio", cta: "Ask OpenAI + image", icon: ImagePlus },
   { id: "edit", label: "Edit", title: "Image Edit", cta: "Ask OpenAI + edit", icon: Sparkles },
+  { id: "swimwear", label: "Swimwear", title: "Swimwear Fit Studio", cta: "Grok precheck + generate", icon: Shirt },
   { id: "video", label: "Video", title: "Video Studio", cta: "Ask OpenAI + video", icon: Clapperboard },
   { id: "agent", label: "Agent", title: "Grok Agent", cta: "Send message", icon: Wand2 },
   { id: "billing", label: "Billing", title: "Billing Intelligence", cta: "Refresh billing", icon: CreditCard }
@@ -217,6 +219,10 @@ function App() {
   const [routeActivity, setRouteActivity] = useState(null);
   const [minimalStyling, setMinimalStyling] = useState(null);
   const [isMinimalStyling, setIsMinimalStyling] = useState(false);
+  const [swimwearFit, setSwimwearFit] = useState(null);
+  const [isSwimwearFit, setIsSwimwearFit] = useState(false);
+  const [swimwearModel, setSwimwearModel] = useState("grok-imagine-image-pro");
+  const [swimwearQuality, setSwimwearQuality] = useState("high");
   const [editSession, setEditSession] = useState({
     status: "idle",
     requestedAt: "",
@@ -246,8 +252,10 @@ function App() {
   const [imagePrompt, setImagePrompt] = useState("Luxury fashion model full-body editorial image, neutral studio background, accurate garment proportions, premium catalog lighting.");
   const [videoPrompt, setVideoPrompt] = useState("Fashion model turns slowly for a fit-review walk cycle, clean studio lighting, realistic fabric movement, professional campaign style.");
   const [editPrompt, setEditPrompt] = useState("Enhance this fashion model image with premium editorial lighting, keep the body proportions and garment shape consistent, clean background distractions, preserve realistic skin and fabric detail.");
+  const [swimwearPrompt, setSwimwearPrompt] = useState("Create a tasteful adult fashion-catalog bikini swimwear edit with premium resort styling, realistic fabric, natural coverage, and preserved identity, pose, and body proportions.");
   const inputRef = useRef(null);
   const editInputRef = useRef(null);
+  const swimwearInputRef = useRef(null);
   const agentInputRef = useRef(null);
   const routeTimersRef = useRef([]);
   const measurementTimersRef = useRef([]);
@@ -267,7 +275,7 @@ function App() {
     () => filterMediaResults(projectMediaResults, outputFilters),
     [projectMediaResults, outputFilters]
   );
-  const currentPrompt = activeMode === "edit" ? editPrompt : activeMode === "video" ? videoPrompt : imagePrompt;
+  const currentPrompt = activeMode === "edit" ? editPrompt : activeMode === "video" ? videoPrompt : activeMode === "swimwear" ? swimwearPrompt : imagePrompt;
   const currentRecommendation = useMemo(
     () => buildModelRecommendation(activeMode, {
       measurementProvider,
@@ -276,11 +284,12 @@ function App() {
       imageModel,
       editProvider,
       editModel,
+      swimwearModel,
       videoProvider,
       videoModel,
       hasImage: Boolean(activeFile || editFile || agentReference)
     }),
-    [activeMode, measurementProvider, measurementModel, imageProvider, imageModel, editProvider, editModel, videoProvider, videoModel, activeFile, editFile, agentReference]
+    [activeMode, measurementProvider, measurementModel, imageProvider, imageModel, editProvider, editModel, swimwearModel, videoProvider, videoModel, activeFile, editFile, agentReference]
   );
 
   useEffect(() => {
@@ -392,7 +401,7 @@ function App() {
       prompt: currentPrompt.trim(),
       negativePrompt: "",
       tags: inferPromptTags(currentPrompt, activeMode),
-      type: activeMode === "edit" ? "edit" : activeMode === "video" ? "video" : "image",
+      type: activeMode === "edit" || activeMode === "swimwear" ? "edit" : activeMode === "video" ? "video" : "image",
       providerCompatibility: compatibleProvidersForMode(activeMode),
       favorite: true,
       projectId: activeProject.id,
@@ -407,6 +416,9 @@ function App() {
     if (activeMode === "video" || promptItem.type === "video") {
       setVideoPrompt(promptItem.prompt);
       setActiveMode("video");
+    } else if (activeMode === "swimwear") {
+      setSwimwearPrompt(promptItem.prompt);
+      setActiveMode("swimwear");
     } else if (activeMode === "edit" || promptItem.type === "edit") {
       setEditPrompt(promptItem.prompt);
       setActiveMode("edit");
@@ -499,6 +511,8 @@ function App() {
     } else if (activeMode === "edit") {
       setEditProvider(recommendation.provider === "openai" ? "xai" : recommendation.provider);
       setEditModel(recommendation.model);
+    } else if (activeMode === "swimwear") {
+      setSwimwearModel(recommendation.model);
     } else if (activeMode === "video") {
       setVideoProvider(recommendation.provider);
       setVideoModel(recommendation.model);
@@ -887,6 +901,133 @@ function App() {
     }
   };
 
+  const callSwimwearFit = async () => {
+    const source = editFile || agentReference || activeFile;
+    if (!source) {
+      setNotice({ tone: "warning", text: "Upload or select a model image before Swimwear Fit Studio." });
+      return;
+    }
+    if (isSwimwearFit || isRouting) {
+      setNotice({ tone: "progress", text: "Swimwear Fit Studio is already running." });
+      return;
+    }
+
+    const prompt = swimwearPrompt.trim() || "Create a tasteful adult fashion-catalog bikini swimwear edit with premium resort styling, realistic fabric, natural coverage, and preserved identity, pose, and body proportions.";
+    const formData = new FormData();
+    await appendReferenceToFormData(formData, source);
+    formData.append("model", swimwearModel);
+    formData.append("quality", swimwearQuality);
+    formData.append("size", imageSize);
+    formData.append("userPrompt", prompt);
+
+    const started = {
+      status: "running",
+      finalOutcome: "running",
+      message: "Grok is checking safety, adult context, and swimwear-fit suitability before any image edit call.",
+      attempts: [],
+      events: [
+        { stage: "request", status: "accepted", providerResponse: "Model image attached for swimwear fit precheck." },
+        { stage: "precheck", status: "running", providerResponse: "Grok is preparing safe fashion-catalog prompts." }
+      ]
+    };
+    setSwimwearFit(started);
+    setIsSwimwearFit(true);
+    beginEditSession({
+      source,
+      prompt,
+      provider: "Grok / xAI precheck",
+      model: swimwearModel,
+      reason: "Grok prechecks safety first, then runs at most two compliant swimwear image-edit attempts.",
+      message: started.message
+    });
+    setOperation({ type: "Swimwear Fit Studio", provider: "Grok / xAI", model: swimwearModel, status: "running", step: 1, message: started.message });
+    setProgressOverlay({ type: "Swimwear Fit Studio", provider: "Grok / xAI", label: "Precheck", progress: 30, quality: "Fashion" });
+    setNotice({ tone: "progress", text: "Grok precheck started. No image edit call is made unless it passes." });
+
+    try {
+      const response = await fetch("/api/swimwear-fit", { method: "POST", body: formData });
+      const result = await response.json();
+      if (!response.ok && !["stopped", "blocked"].includes(result.status)) throw new Error(result.error || result.message || "Swimwear Fit Studio failed.");
+
+      setSwimwearFit(result);
+      const promptUsed = result.attempts?.find((attempt) => attempt.prompt)?.prompt || result.plan?.primaryPrompt || prompt;
+      const saved = enhanceSavedMedia(
+        normalizeSavedMedia(result.saved, "image", result.provider || "xai", result.model || swimwearModel, "Swimwear fit"),
+        { prompt: promptUsed, mode: "swimwear", resultType: "Swimwear fit" }
+      );
+      if (saved.length) {
+        setMediaResults((current) => mergeMediaResults(current, saved).slice(0, 60));
+        touchActiveProject();
+        setAgentReference(saved[0]);
+        setAgentFile(null);
+      }
+      completeEditSession({
+        status: result.status === "completed" ? "completed" : result.status,
+        refinedPrompt: promptUsed,
+        provider: "Grok / xAI",
+        model: result.model || swimwearModel,
+        reason: result.plan?.userMessage || "Grok completed the safety precheck before editing.",
+        message: result.message || "Swimwear Fit Studio finished.",
+        result: saved.find((item) => item.kind === "image") || null,
+        saved
+      });
+      const totalCost = Number(result.costUsd || 0) || (result.events || []).reduce((sum, item) => sum + Number(item.costUsd || item.estimatedCostUsd || 0), 0);
+      setUsageLog((current) => [
+        buildUsageEntry("Image", {
+          model: result.model || swimwearModel,
+          provider: "xai",
+          costUsd: totalCost,
+          status: result.finalOutcome || result.status
+        }),
+        ...current
+      ].slice(0, 16));
+      refreshBillingSnapshot();
+      setOperation({
+        type: "Swimwear Fit Studio",
+        provider: "Grok / xAI",
+        model: result.model || swimwearModel,
+        status: result.status === "completed" ? "completed" : result.status,
+        step: saved.length ? 3 : 2,
+        message: result.message || "Swimwear Fit Studio finished."
+      });
+      setProgressOverlay({
+        type: "Swimwear Fit Studio",
+        provider: "Grok / xAI",
+        label: result.status === "completed" ? "Completed" : "Stopped",
+        progress: 100,
+        quality: "Fashion",
+        done: result.status === "completed",
+        failed: result.status !== "completed"
+      });
+      setTimeout(() => setProgressOverlay(null), 1500);
+      setNotice({
+        tone: result.status === "completed" ? "success" : "warning",
+        text: compactMessage(result.message || "Swimwear Fit Studio finished.")
+      });
+    } catch (error) {
+      const text = compactMessage(error.message);
+      setSwimwearFit((current) => ({
+        ...(current || {}),
+        status: "failed",
+        finalOutcome: "failed",
+        message: text,
+        events: [...(current?.events || []), { stage: "request", status: "failed", providerResponse: text }]
+      }));
+      completeEditSession({
+        status: "failed",
+        provider: "Grok / xAI",
+        model: swimwearModel,
+        message: text
+      });
+      setOperation({ type: "Swimwear Fit Studio", provider: "Grok / xAI", model: swimwearModel, status: "failed", step: 1, message: text });
+      setProgressOverlay({ type: "Swimwear Fit Studio", provider: "Grok / xAI", label: "Failed", progress: 100, quality: "Fashion", failed: true });
+      setTimeout(() => setProgressOverlay(null), 1500);
+      setNotice({ tone: "warning", text });
+    } finally {
+      setIsSwimwearFit(false);
+    }
+  };
+
   const sendAgentMessage = async () => {
     const message = agentInput.trim();
     if (!message || isAgentThinking) return;
@@ -1113,7 +1254,9 @@ function App() {
   };
 
   const runPrimaryAction = () => {
-    if (["measure", "image", "edit", "video"].includes(activeMode)) {
+    if (activeMode === "swimwear") {
+      callSwimwearFit();
+    } else if (["measure", "image", "edit", "video"].includes(activeMode)) {
       callAssistantRouter();
     } else if (activeMode === "agent" && agentInput.trim()) {
       sendAgentMessage();
@@ -1454,7 +1597,13 @@ function App() {
   };
 
   const activeMeta = workspaceModes.find((mode) => mode.id === activeMode) || workspaceModes[0];
-  const primaryDisabled = activeMode === "agent" ? !agentInput.trim() || isAgentThinking : activeMode === "measure" ? isMeasuring : false;
+  const primaryDisabled = activeMode === "agent"
+    ? !agentInput.trim() || isAgentThinking
+    : activeMode === "measure"
+      ? isMeasuring
+      : activeMode === "swimwear"
+        ? isSwimwearFit || isRouting
+        : false;
   const editSource = editFile || agentReference || activeFile;
 
   return (
@@ -1536,6 +1685,8 @@ function App() {
               setEditProvider={setEditProvider}
               editModel={editModel}
               setEditModel={setEditModel}
+              swimwearModel={swimwearModel}
+              setSwimwearModel={setSwimwearModel}
             />
             <button className="topbarButton ghost" type="button" onClick={() => inputRef.current?.click()}>
               <Upload size={17} />
@@ -1548,9 +1699,9 @@ function App() {
             <button className="topbarButton iconOnly" type="button" onClick={() => setTheme((current) => current === "dark" ? "light" : "dark")} aria-label="Toggle theme">
               {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
             </button>
-            <button className="topbarButton ghost orchestrationButton" type="button" disabled={isRouting} onClick={callAssistantRouter}>
+            <button className="topbarButton ghost orchestrationButton" type="button" disabled={isRouting || activeMode === "swimwear"} onClick={callAssistantRouter}>
               <Sparkles size={17} />
-              {isRouting ? "Routing..." : "Ask OpenAI"}
+              {activeMode === "swimwear" ? "Grok precheck" : isRouting ? "Routing..." : "Ask OpenAI"}
             </button>
             <button className="topbarButton primary" type="button" disabled={primaryDisabled} onClick={runPrimaryAction}>
               <Wand2 size={17} />
@@ -1903,6 +2054,87 @@ function App() {
           </GeneratorCard>
 
           <GeneratorCard
+            icon={<Shirt size={22} />}
+            title="Swimwear Fit Studio"
+            subtitle="Upload/select a model photo, let Grok precheck safety, then create a tasteful swimwear fashion edit"
+            prompt={swimwearPrompt}
+            setPrompt={setSwimwearPrompt}
+            primaryLabel="Grok precheck + generate swimwear"
+            busyLabel="Grok precheck running"
+            disabled={isSwimwearFit || isRouting}
+            costHint={`Precheck runs first. If approved, edit attempt costs ≈ ${formatUsd(previewActionCost("image_edit", swimwearModel))}. Max 2 compliant attempts.`}
+            onGenerate={callSwimwearFit}
+            recommendation={activeMode === "swimwear" ? currentRecommendation : null}
+            onApplyRecommendation={applyRecommendation}
+            onSavePrompt={saveCurrentPrompt}
+            onOpenPromptLibrary={() => setPromptLibraryOpen(true)}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              hidden
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (!file) return;
+                const url = URL.createObjectURL(file);
+                setEditFile({
+                  id: `swimwear-${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+                  file,
+                  url
+                });
+                setEditSession((current) => ({
+                  ...current,
+                  status: "selected",
+                  source: { name: file.name, url, type: "image" },
+                  userPrompt: swimwearPrompt,
+                  providerMessage: "Model image selected for Swimwear Fit Studio."
+                }));
+                setNotice({ tone: "progress", text: "Swimwear reference image selected." });
+              }}
+              ref={swimwearInputRef}
+            />
+            <button className="browseEditButton" type="button" onClick={() => swimwearInputRef.current?.click()}>
+              <Upload size={17} />
+              Browse model image
+            </button>
+            <div className="swimwearPrecheckCard">
+              <div>
+                <ShieldCheck size={18} />
+                <strong>Grok precheck before generation</strong>
+              </div>
+              <p>Blocks unsafe, unclear-age, explicit, lingerie, or bypass-style requests before any image-edit credits are spent. Approved prompts stay in adult fashion catalog swimwear language.</p>
+              <ul>
+                <li>Adult context and safe styling check</li>
+                <li>Primary bikini prompt plus one conservative fallback</li>
+                <li>Stops after two compliant attempts</li>
+              </ul>
+            </div>
+            <SwimwearFitStatus result={swimwearFit} isRunning={isSwimwearFit} />
+            <div className="modelPicker singleProvider">
+              <span>Grok swimwear edit model</span>
+              <div>
+                <select value={swimwearModel} onChange={(event) => setSwimwearModel(event.target.value)}>
+                  {editModelOptions.xai.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <select value={swimwearQuality} onChange={(event) => setSwimwearQuality(event.target.value)}>
+                  <option value="high">2K quality</option>
+                  <option value="standard">1K quality</option>
+                </select>
+              </div>
+            </div>
+            <div className="editHint">
+              {editSource?.url && <img src={editSource.url} alt="Selected model for swimwear fit" />}
+              <div>
+                <span>Model sent for swimwear fit</span>
+                <strong>{editSource?.file?.name || editSource?.filename || "No model image selected yet"}</strong>
+                <small>Grok checks this image and prompt first. Only safe adult fashion swimwear prompts are sent to the image-edit model.</small>
+              </div>
+            </div>
+          </GeneratorCard>
+
+          <GeneratorCard
             icon={<Clapperboard size={22} />}
             title="Video Generator"
             subtitle="Sora render request with standard quality controls"
@@ -2036,7 +2268,9 @@ function TopbarModelControl({
   editProvider,
   setEditProvider,
   editModel,
-  setEditModel
+  setEditModel,
+  swimwearModel,
+  setSwimwearModel
 }) {
   if (activeMode === "measure") {
     return (
@@ -2106,6 +2340,26 @@ function TopbarModelControl({
           setModel={setEditModel}
           models={editModelOptions[editProvider]}
         />
+      </div>
+    );
+  }
+
+  if (activeMode === "swimwear") {
+    return (
+      <div className="topModelPicker">
+        <div className="modelPicker">
+          <span>Swimwear model</span>
+          <div>
+            <select value="xai" disabled>
+              <option value="xai">Grok / xAI</option>
+            </select>
+            <select value={swimwearModel} onChange={(event) => setSwimwearModel(event.target.value)}>
+              {editModelOptions.xai.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
       </div>
     );
   }
@@ -2424,6 +2678,7 @@ function CommandPalette({ onClose, setActiveMode, onUpload, onRoute, isRouting }
     { label: "Measure uploaded model", hint: "Open measurement workspace", icon: Ruler, run: () => setActiveMode("measure") },
     { label: "Create a new image", hint: "Prompt-to-image generation", icon: ImagePlus, run: () => setActiveMode("image") },
     { label: "Edit an existing image", hint: "Upload photo and change styling/clothes", icon: Sparkles, run: () => setActiveMode("edit") },
+    { label: "Swimwear Fit Studio", hint: "Grok precheck before bikini/swimwear edit", icon: Shirt, run: () => setActiveMode("swimwear") },
     { label: "Generate video", hint: "Image-to-video or prompt-to-video", icon: Clapperboard, run: () => setActiveMode("video") },
     { label: "Chat with Grok Agent", hint: "Plan edits and video scenes", icon: Wand2, run: () => setActiveMode("agent") },
     { label: "Upload image", hint: "Add local reference photos", icon: Upload, run: onUpload },
@@ -3729,6 +3984,7 @@ function inferPromptTags(prompt = "", mode = "image") {
 
 function compatibleProvidersForMode(mode) {
   if (mode === "video") return ["OpenAI", "Gemini", "Grok"];
+  if (mode === "swimwear") return ["Grok"];
   if (mode === "edit") return ["Grok", "Gemini"];
   if (mode === "measure") return ["Grok", "OpenAI", "Gemini"];
   return ["OpenAI", "Gemini", "Grok"];
@@ -3750,6 +4006,15 @@ function relativeProjectTime(project = {}) {
 }
 
 function buildModelRecommendation(mode, context = {}) {
+  if (mode === "swimwear") {
+    return {
+      provider: "xai",
+      providerLabel: "Grok / xAI",
+      model: context.swimwearModel || editModelOptions.xai[1].value,
+      modelLabel: (editModelOptions.xai.find((item) => item.value === context.swimwearModel) || editModelOptions.xai[1]).label,
+      reason: "Best fit for image-to-image fashion restyling with a Grok safety precheck before any swimwear edit call."
+    };
+  }
   if (mode === "video") {
     return {
       provider: "gemini",
@@ -4141,6 +4406,53 @@ function MinimalStylingStatus({ result, isRunning }) {
         ))}
       </div>
       {result?.message && <p>{result.message}</p>}
+    </div>
+  );
+}
+
+function SwimwearFitStatus({ result, isRunning }) {
+  if (!result && !isRunning) {
+    return (
+      <div className="minimalStatus idle swimwearStatus">
+        <span>Swimwear precheck</span>
+        <strong>Grok checks before generating</strong>
+        <small>Unsafe, explicit, unclear-age, or bypass-style requests are stopped before the image provider is called.</small>
+      </div>
+    );
+  }
+
+  const events = result?.events?.length
+    ? result.events
+    : [
+        { stage: "request", status: "accepted", providerResponse: "Model image attached for swimwear fit." },
+        { stage: "precheck", status: isRunning ? "running" : "pending", providerResponse: "Grok safety and fit precheck is running." }
+      ];
+  const outcome = result?.finalOutcome || result?.status || (isRunning ? "running" : "idle");
+
+  return (
+    <div className={`minimalStatus swimwearStatus ${outcome}`}>
+      <div className="minimalStatusHeader">
+        <span>Swimwear Fit status</span>
+        <strong>{readableIntent(outcome)}</strong>
+      </div>
+      <div className="minimalTimeline">
+        {events.slice(-6).map((event, index) => (
+          <div key={`${event.stage}-${event.status}-${index}`} className={`minimalEvent ${event.status}`}>
+            <i>{event.status === "allowed" || event.status === "succeeded" ? <Check size={12} /> : index + 1}</i>
+            <div>
+              <strong>{event.stage || "step"} · {event.status || "pending"}</strong>
+              <small>{compactMessage(event.providerResponse || event.rejectionReason || "Waiting for provider response.")}</small>
+            </div>
+          </div>
+        ))}
+      </div>
+      {result?.message && <p>{result.message}</p>}
+      {result?.plan?.primaryPrompt && (
+        <details className="softAccordion">
+          <summary>Safe prompt prepared</summary>
+          <p>{result.plan.primaryPrompt}</p>
+        </details>
+      )}
     </div>
   );
 }

@@ -12069,3 +12069,71 @@ body {
     flex-direction: column;
   }
 }
+
+/* Final Swimwear Fit Studio overrides. Keep these after legacy layout blocks. */
+.mode-swimwear .contentGrid,
+.mode-swimwear .agentChatSection {
+  display: none !important;
+}
+
+.mode-swimwear .generatorGrid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+
+.mode-edit .generatorGrid .generatorCard:nth-child(4),
+.mode-video .generatorGrid .generatorCard:nth-child(3),
+.mode-swimwear .generatorGrid .generatorCard:nth-child(1),
+.mode-swimwear .generatorGrid .generatorCard:nth-child(2),
+.mode-swimwear .generatorGrid .generatorCard:nth-child(4) {
+  display: none !important;
+}
+
+.swimwearPrecheckCard {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid rgba(61, 153, 112, 0.18);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, rgba(61, 153, 112, 0.10), rgba(201, 165, 92, 0.08)),
+    var(--card);
+}
+
+.swimwearPrecheckCard > div {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--accent);
+}
+
+.swimwearPrecheckCard strong {
+  color: var(--foreground);
+  font-size: 14px;
+}
+
+.swimwearPrecheckCard p,
+.swimwearPrecheckCard li {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.swimwearPrecheckCard ul {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-5);
+}
+
+.swimwearStatus.generated,
+.swimwearStatus.completed {
+  border-color: rgba(61, 153, 112, 0.28);
+  background: rgba(61, 153, 112, 0.08);
+}
+
+.swimwearStatus.blocked,
+.swimwearStatus.stopped,
+.swimwearStatus.failed {
+  border-color: rgba(214, 69, 69, 0.22);
+  background: rgba(214, 69, 69, 0.07);
+}
