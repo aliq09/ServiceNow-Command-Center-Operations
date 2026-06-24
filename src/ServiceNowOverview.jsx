@@ -21,6 +21,8 @@ import {
   TriangleAlert,
   Wrench
 } from "lucide-react";
+import { ConnectionStatus } from "./ConnectionStatus";
+import { DataStateIndicator, formatMetricValue, metricAvailabilityLabel } from "./DataStateHelper";
 
 const ITSM_METRICS = [
   { key: "incidents", label: "Active incidents", icon: Siren, tone: "red" },
@@ -137,6 +139,7 @@ export function ServiceNowOverview({
         </div>
 
         <div className="snConnectionControls">
+          <ConnectionStatus connection={connection} refreshedAt={overview?.generatedAt} />
           <label className="snInstancePicker snInstancePickerHero">
             <span>Switch instance</span>
             <select value={instanceId} onChange={(event) => onSelectInstance(event.target.value)} aria-label="ServiceNow instance">
@@ -325,8 +328,11 @@ function OverviewMetric({ metric, value }) {
 }
 
 function metricValue(metric) {
-  if (!metric?.available) return "â";
-  return Number(metric.value || 0).toLocaleString("en-GB");
+  return formatMetricValue(metric, false);
+}
+
+function metricAvailability(metric) {
+  return metricAvailabilityLabel(metric);
 }
 
 function metricAvailability(metric) {

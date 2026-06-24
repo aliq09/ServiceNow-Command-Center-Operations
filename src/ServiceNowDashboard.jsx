@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle
 } from "lucide-react";
+import { useToast, ToastContainer } from "./useToast";
 import { WorkInstanceDialog } from "./WorkInstanceDialog";
 import { ServiceNowOverview } from "./ServiceNowOverview";
 import { ServiceNowDiscovery } from "./ServiceNowDiscovery";
@@ -14,6 +15,7 @@ import { UnifiedRecordExplorer } from "./UnifiedRecordExplorer";
 import { ServiceNowDeveloperStudio } from "./ServiceNowDeveloperStudio";
 
 export function ServiceNowDashboard() {
+  const { toasts, showToast, removeToast } = useToast();
   const [overview, setOverview] = useState(null);
   const [discovery, setDiscovery] = useState(null);
   const [sam, setSam] = useState(null);
@@ -102,24 +104,24 @@ export function ServiceNowDashboard() {
   }, [instanceId, refreshToken]);
 
   const refreshOverview = useCallback(() => {
-    refreshSection("overview", "/api/servicenow/overview", setOverview, "ServiceNow overview", setSectionState);
-  }, [instanceId]);
+    refreshSection("overview", "/api/servicenow/overview", setOverview, "ServiceNow overview", setSectionState, showToast);
+  }, [instanceId, showToast]);
 
   const refreshDiscovery = useCallback(() => {
-    refreshSection("discovery", "/api/servicenow/discovery", setDiscovery, "Discovery data", setSectionState);
-  }, [instanceId]);
+    refreshSection("discovery", "/api/servicenow/discovery", setDiscovery, "Discovery data", setSectionState, showToast);
+  }, [instanceId, showToast]);
 
   const refreshSam = useCallback(() => {
-    refreshSection("sam", "/api/servicenow/sam", setSam, "SAM Pro data", setSectionState);
-  }, [instanceId]);
+    refreshSection("sam", "/api/servicenow/sam", setSam, "SAM Pro data", setSectionState, showToast);
+  }, [instanceId, showToast]);
 
   const refreshCsdm = useCallback(() => {
-    refreshSection("csdm", "/api/servicenow/csdm", setCsdm, "CSDM data", setSectionState);
-  }, [instanceId]);
+    refreshSection("csdm", "/api/servicenow/csdm", setCsdm, "CSDM data", setSectionState, showToast);
+  }, [instanceId, showToast]);
 
   const refreshComputer = useCallback(() => {
-    refreshSection("computer", "/api/servicenow/computer-intelligence", setComputerIntelligence, "computer intelligence data", setSectionState);
-  }, [instanceId]);
+    refreshSection("computer", "/api/servicenow/computer-intelligence", setComputerIntelligence, "computer intelligence data", setSectionState, showToast);
+  }, [instanceId, showToast]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -186,6 +188,7 @@ export function ServiceNowDashboard() {
 
   return (
     <section className="snDashboard" aria-label="ServiceNow operations dashboard">
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
       <ServiceNowOverview
         overview={overview}
         discovery={discovery}
@@ -249,25 +252,41 @@ export function ServiceNowDashboard() {
   );
 }
 
-async function refreshSection(sectionKey, endpoint, setState, label, setSectionState) {
+async function refreshSection(sectionKey, endpoint, setState, label, setSectionState, showToast) {
   const startedAt = Date.now();
   setSectionState((current) => ({
     ...current,
     [sectionKey]: { loading: true, startedAt, tick: 0 }
   }));
-  const params = new URLSearchParams({
-    instance: localStorage.getItem("servicenowInstance") || "pdi",
-    refresh: String(Date.now())
-  });
-  const response = await fetch(`${endpoint}?${params}`, { cache: "no-store" });
-  const result = await readJsonResponse(response, label);
-  if (!response.ok) throw new Error(result.error || `Unable to refresh ${label}.`);
-  setState(result);
-  setSectionState((current) => ({
-    ...current,
-    [sectionKey]: { loading: false, startedAt: null, tick: 0, updatedAt: Date.now() }
-  }));
-  return result;
+  try {
+    const params = new URLSearchParams({
+      instance: localStorage.getItem("servicenowInstance") || "pdi",
+      refresh: String(Date.now())
+    });
+    const response = await fetch(`${endpoint}?${params}`, { cache: "no-store" });
+    const result = await readJsonResponse(response, label);
+    if (!response.ok) {
+      const error = result.error || `Unable to refresh ${label}.`;
+      showToast?.(`Error: ${error}`, "error", 4000);
+      throw new Error(error);
+    }
+    setState(result);
+    setSectionState((current) => ({
+      ...current,
+      [sectionKey]: { loading: false, startedAt: null, tick: 0, updatedAt: Date.now() }
+    }));
+    showToast?.(`${label} refreshed successfully`, "success", 3000);
+    return result;
+  } catch (err) {
+    setSectionState((current) => ({
+      ...current,
+      [sectionKey]: { loading: false, startedAt: null, tick: 0 }
+    }));
+    if (err.message !== "AbortError") {
+      showToast?.(`Error refreshing ${label}`, "error", 4000);
+    }
+    throw err;
+  }
 }
 
 async function readJsonResponse(response, label) {
