@@ -331,10 +331,6 @@ function metricValue(metric) {
   return formatMetricValue(metric, false);
 }
 
-function metricAvailability(metric) {
-  return metricAvailabilityLabel(metric);
-}
-
 function resolveCmdbMetric(cmdb, key) {
   if (!cmdb) return null;
   if (key === "relationships") return cmdb.relationships;
