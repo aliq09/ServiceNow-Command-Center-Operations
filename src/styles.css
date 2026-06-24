@@ -19056,3 +19056,519 @@ body {
   align-items: center;
   gap: 6px;
 }
+
+/* ============================================================================
+   UX REDESIGN - Dashboard Layout with Sidebar, Enhanced Hero, Metric Cards
+   ============================================================================ */
+
+.snDashboardLayout {
+  display: flex;
+  height: 100vh;
+  background: #f8f9fa;
+}
+
+.snModuleSidebar {
+  width: 200px;
+  background: white;
+  border-right: 1px solid #e0e0e0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  transition: width 0.3s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.snModuleSidebar.is-collapsed {
+  width: 70px;
+}
+
+.snSidebarHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.snSidebarToggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: #666;
+  transition: color 0.2s ease;
+}
+
+.snSidebarToggle:hover {
+  color: #333;
+}
+
+.snSidebarTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  letter-spacing: 0.5px;
+}
+
+.snModuleNav {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+}
+
+.snModuleNavItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #666;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.snModuleNavItem:hover {
+  background: #f5f5f5;
+  color: #333;
+}
+
+.snModuleNavItem.is-active {
+  background: #e8f5e9;
+  color: #1976d2;
+  border-left: 3px solid #1976d2;
+  padding-left: 9px;
+  font-weight: 600;
+}
+
+.snModuleIcon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.snModuleLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.snModuleLabel strong {
+  display: block;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.snModuleLabel small {
+  display: block;
+  font-size: 11px;
+  color: #999;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.snSidebarFooter {
+  padding: 12px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 11px;
+  color: #999;
+  text-align: center;
+}
+
+.snSidebarHint {
+  display: block;
+  line-height: 1.4;
+}
+
+.snDashboardMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  background: #f8f9fa;
+}
+
+.snHeroHeader {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 32px;
+  background: linear-gradient(135deg, #ffffff 0%, #f9fafb 100%);
+  border-bottom: 2px solid #e8eaed;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.snHeroLeft {
+  flex: 1;
+}
+
+.snHeroTitle {
+  margin: 0;
+}
+
+.snHeroTitle h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.snHeroTitle p {
+  margin: 4px 0 0 0;
+  font-size: 13px;
+  color: #666;
+}
+
+.snHeroCenter {
+  flex: 0 0 auto;
+}
+
+.snConnectionBadge {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  background: white;
+  transition: all 0.3s ease;
+}
+
+.snConnectionBadge.status-green {
+  border-color: #4caf50;
+  background: rgba(76, 175, 80, 0.05);
+}
+
+.snConnectionBadge.status-orange {
+  border-color: #ff9800;
+  background: rgba(255, 152, 0, 0.05);
+}
+
+.snConnectionBadge.status-red {
+  border-color: #f44336;
+  background: rgba(244, 67, 54, 0.05);
+}
+
+.snConnectionBadge.status-gray {
+  border-color: #bdbdbd;
+  background: rgba(189, 189, 189, 0.05);
+}
+
+.snConnectionDot {
+  display: flex;
+  align-items: center;
+  color: currentColor;
+}
+
+.snConnectionDot-healthy {
+  color: #4caf50;
+}
+
+.snConnectionDot-warning {
+  color: #ff9800;
+}
+
+.snConnectionDot-error {
+  color: #f44336;
+}
+
+.snConnectionDot-pending {
+  color: #bdbdbd;
+  animation: snPulse 2s ease-in-out infinite;
+}
+
+.snConnectionInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.snConnectionInfo strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a1a;
+}
+
+.snConnectionInfo small {
+  font-size: 11px;
+  color: #666;
+}
+
+.snSyncStatus {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+  font-size: 11px;
+  color: #999;
+}
+
+.snSyncStatus span {
+  font-weight: 500;
+}
+
+.snHeroRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.snInstancePickerHero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+}
+
+.snInstancePickerHero span {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  letter-spacing: 0.5px;
+}
+
+.snInstancePickerHero select {
+  padding: 8px 32px 8px 12px;
+  border: 1px solid #d0d0d0;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+  appearance: none;
+}
+
+.snHeroRefreshBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #1976d2;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.snHeroRefreshBtn:hover {
+  background: #1565c0;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+.snHeroRefreshBtn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.snHeroRefreshBtn svg.isSpinning {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.snEnhancedMetricCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.snEnhancedMetricCard:hover {
+  border-color: #bdbdbd;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.snEnhancedMetricCard.state-unavailable {
+  background: #f5f5f5;
+  border-color: #f0f0f0;
+}
+
+.snMetricHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.snMetricIcon {
+  display: flex;
+  align-items: center;
+  color: #666;
+  flex-shrink: 0;
+}
+
+.snMetricLabel {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #999;
+  letter-spacing: 0.3px;
+}
+
+.snMetricValue {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.snMetricValue strong {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+
+.snMetricValue strong.snMetricValueUnavailable {
+  font-size: 18px;
+  color: #999;
+  opacity: 0.6;
+}
+
+.snTrendBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.snTrendBadge.trend-up {
+  background: rgba(76, 175, 80, 0.1);
+  color: #4caf50;
+}
+
+.snTrendBadge.trend-down {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+}
+
+.snTrendBadge.trend-flat {
+  background: rgba(189, 189, 189, 0.1);
+  color: #999;
+}
+
+.snMetricStatus {
+  font-size: 11px;
+  color: #999;
+}
+
+.snMetricAvailable {
+  font-style: normal;
+  display: block;
+}
+
+.snMetricPlaceholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 80px;
+  color: #bdbdbd;
+}
+
+.snMetricPlaceholder svg {
+  opacity: 0.5;
+}
+
+.snMetricPlaceholder small {
+  font-size: 11px;
+}
+
+.snMetricGrid {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+}
+
+.snMetricGrid.cols-auto {
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.snMetricGrid.cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.snMetricGrid.cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.snMetricGrid.cols-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1200px) {
+  .snHeroHeader {
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .snMetricGrid.cols-auto {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .snDashboardLayout {
+    flex-direction: column;
+  }
+
+  .snModuleSidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid #e0e0e0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .snModuleNav {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+  }
+
+  .snHeroHeader {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .snHeroCenter {
+    flex: 1;
+  }
+
+  .snHeroRight {
+    flex-wrap: wrap;
+  }
+
+  .snMetricGrid.cols-auto {
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  }
+}

@@ -3,6 +3,8 @@ import {
   AlertTriangle
 } from "lucide-react";
 import { useToast, ToastContainer } from "./useToast";
+import { DashboardLayout } from "./DashboardLayout";
+import { HeroHeader } from "./HeroHeader";
 import { WorkInstanceDialog } from "./WorkInstanceDialog";
 import { ServiceNowOverview } from "./ServiceNowOverview";
 import { ServiceNowDiscovery } from "./ServiceNowDiscovery";
@@ -189,19 +191,33 @@ export function ServiceNowDashboard() {
   return (
     <section className="snDashboard" aria-label="ServiceNow operations dashboard">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <ServiceNowOverview
-        overview={overview}
-        discovery={discovery}
-        sam={sam}
-        csdm={csdm}
-        instances={instances}
-        instanceId={instanceId}
-        onSelectInstance={selectInstance}
-        onRefresh={() => setRefreshToken((value) => value + 1)}
-        onRefreshOverview={refreshOverview}
-        refreshState={sectionState.overview}
-        loading={loading}
-      />
+      <DashboardLayout currentModule="overview">
+        {/* Enhanced Hero Header */}
+        <HeroHeader
+          instanceId={instanceId}
+          instances={instances}
+          onSelectInstance={selectInstance}
+          onRefresh={() => setRefreshToken((value) => value + 1)}
+          loading={loading}
+          connection={connection}
+          overview={overview}
+          refreshedAt={overview?.generatedAt}
+        />
+        
+        {/* Main Overview Content */}
+        <ServiceNowOverview
+          overview={overview}
+          discovery={discovery}
+          sam={sam}
+          csdm={csdm}
+          instances={instances}
+          instanceId={instanceId}
+          onSelectInstance={selectInstance}
+          onRefresh={() => setRefreshToken((value) => value + 1)}
+          onRefreshOverview={refreshOverview}
+          refreshState={sectionState.overview}
+          loading={loading}
+        />
 
       {error && (
         <div className="snError" role="alert">
@@ -243,11 +259,13 @@ export function ServiceNowDashboard() {
       />
       <UnifiedRecordExplorer instanceId={instanceId} />
       <ServiceNowDeveloperStudio instanceId={instanceId} />
+      
       <WorkInstanceDialog
         open={workDialogOpen}
         onCancel={() => setWorkDialogOpen(false)}
         onConnected={completeWorkConnection}
       />
+      </DashboardLayout>
     </section>
   );
 }

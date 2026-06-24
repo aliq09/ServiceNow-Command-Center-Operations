@@ -21,7 +21,7 @@ import {
   TriangleAlert,
   Wrench
 } from "lucide-react";
-import { ConnectionStatus } from "./ConnectionStatus";
+import { EnhancedMetricCard, MetricGrid } from "./EnhancedMetricCard";
 import { DataStateIndicator, formatMetricValue, metricAvailabilityLabel } from "./DataStateHelper";
 
 const ITSM_METRICS = [
@@ -315,16 +315,7 @@ function DomainHeader({ icon: Icon, eyebrow, title, subtitle }) {
 
 function OverviewMetric({ metric, value }) {
   const Icon = metric.icon;
-  return (
-    <article className={`snOverviewMetric tone-${metric.tone}`}>
-      <span><Icon size={17} /></span>
-      <div>
-        <small>{metric.label}</small>
-        <strong>{metricValue(value)}</strong>
-        <em>{metricAvailability(value)}</em>
-      </div>
-    </article>
-  );
+  return <EnhancedMetricCard metric={value} icon={Icon} />;
 }
 
 function metricValue(metric) {
