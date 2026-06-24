@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "servicenow-pdi": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\aliqa\\OneDrive\\My Documents\\New project 2\\mcp\\servicenow_server.py",
+        "--profile",
+        "pdi"
+      ]
+    },
+    "servicenow-work": {
+      "command": "python",
+      "args": [
+        "C:\\Users\\aliqa\\OneDrive\\My Documents\\New project 2\\mcp\\servicenow_server.py",
+        "--profile",
+        "work"
+      ]
+    }
+  }
+}

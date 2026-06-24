@@ -31,6 +31,7 @@ import {
   Wand2
 } from "lucide-react";
 import "./styles.css";
+import { ServiceNowApp } from "./ServiceNowApp";
 
 const measurementSteps = [
   "Image uploaded",
@@ -4787,4 +4788,6 @@ function buildRetailSearchUrl(retailer, query) {
 const rootElement = document.getElementById("root");
 const root = window.__atelierRoot || createRoot(rootElement);
 window.__atelierRoot = root;
-root.render(<App />);
+const isServiceNowRoute = window.location.pathname === "/servicenow" || window.location.pathname.startsWith("/servicenow/");
+document.title = isServiceNowRoute ? "ServiceNow Operations" : "Atelier Measure Studio";
+root.render(isServiceNowRoute ? <ServiceNowApp /> : <App />);

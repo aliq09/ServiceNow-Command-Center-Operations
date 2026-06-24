@@ -1,4 +1,8 @@
 .env
+.env.servicenow
+.env.servicenow.*
+!.env.servicenow.example
+!.env.servicenow.work.example
 node_modules/
 dist/
 outputs/

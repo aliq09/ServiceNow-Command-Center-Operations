@@ -1,0 +1,18 @@
+{
+  "defaultInstance": "pdi",
+  "instances": [
+    {
+      "id": "pdi",
+      "name": "Personal Developer Instance",
+      "environment": "Development",
+      "envFile": ".env.servicenow"
+    },
+    {
+      "id": "work",
+      "name": "Work Instance",
+      "environment": "Production",
+      "credentialMode": "session",
+      "envFile": ".env.servicenow.work"
+    }
+  ]
+}
