@@ -26,3 +26,13 @@ to load the ServiceNow operations console.
 - Credentials are handled server-side.
 - ServiceNow instance profiles are configured through the local instance registry and environment files.
 - The repo is intended for local operations, controlled testing, and ServiceNow workflow experiments.
+
+## Working snapshot
+
+The current known-good ServiceNow state is saved on branch `codex-app` and should be used as the baseline for future UI or data-movement updates.
+
+Latest snapshot:
+
+- Commit: `f5a0c4f`
+- Branch: `codex-app`
+- Repo: `ServiceNow-Command-Center-Operations`
