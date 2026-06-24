@@ -4789,5 +4789,5 @@ const rootElement = document.getElementById("root");
 const root = window.__atelierRoot || createRoot(rootElement);
 window.__atelierRoot = root;
 const isServiceNowRoute = window.location.pathname === "/servicenow" || window.location.pathname.startsWith("/servicenow/");
-document.title = isServiceNowRoute ? "ServiceNow Operations" : "Atelier Measure Studio";
+document.title = isServiceNowRoute ? "ServiceNow Command Center Operations" : "Atelier Measure Studio";
 root.render(isServiceNowRoute ? <ServiceNowApp /> : <App />);

@@ -8,7 +8,7 @@ export function ServiceNowApp() {
         <a className="snBrand" href="/servicenow" aria-label="ServiceNow Operations home">
           <span><Layers3 size={22} /></span>
           <div>
-            <strong>ServiceNow Operations</strong>
+            <strong>ServiceNow Command Center Operations</strong>
             <small>Operational intelligence hub</small>
           </div>
         </a>
