@@ -21,20 +21,21 @@ import {
   TriangleAlert,
   Wrench
 } from "lucide-react";
+import { ConnectionStatus } from "./ConnectionStatus";
 import { EnhancedMetricCard, MetricGrid } from "./EnhancedMetricCard";
 import { DataStateIndicator, formatMetricValue, metricAvailabilityLabel } from "./DataStateHelper";
 
 const ITSM_METRICS = [
-  { key: "incidents", label: "Active incidents", icon: Siren, tone: "red" },
-  { key: "critical", label: "Critical incidents", icon: TriangleAlert, tone: "red" },
-  { key: "unassigned", label: "Unassigned", icon: CircleUserRound, tone: "amber" },
-  { key: "approvedChanges", label: "Approved changes", icon: TicketCheck, tone: "blue" },
-  { key: "changeApprovals", label: "Change approvals", icon: BadgeCheck, tone: "violet" },
-  { key: "requests", label: "Service requests", icon: ShoppingCart, tone: "blue" },
-  { key: "changes", label: "Active changes", icon: GitPullRequestArrow, tone: "violet" },
-  { key: "requestApprovals", label: "Request approvals", icon: BadgeCheck, tone: "slate" },
-  { key: "changeTasks", label: "Change tasks", icon: Wrench, tone: "slate" },
-  { key: "problems", label: "Active problems", icon: Wrench, tone: "slate" }
+  { key: "incidents", label: "Active incidents", icon: Siren, tone: "red", detail: "Incident records currently open" },
+  { key: "critical", label: "Critical incidents", icon: TriangleAlert, tone: "red", detail: "Priority 1 / urgent incidents" },
+  { key: "unassigned", label: "Unassigned", icon: CircleUserRound, tone: "amber", detail: "Records with no assignee" },
+  { key: "approvedChanges", label: "Approved changes", icon: TicketCheck, tone: "blue", detail: "Changes cleared for implementation" },
+  { key: "changeApprovals", label: "Change approvals", icon: BadgeCheck, tone: "violet", detail: "Change approval workload" },
+  { key: "requests", label: "Service requests", icon: ShoppingCart, tone: "blue", detail: "Request items in progress" },
+  { key: "changes", label: "Active changes", icon: GitPullRequestArrow, tone: "violet", detail: "Change records still open" },
+  { key: "requestApprovals", label: "Request approvals", icon: BadgeCheck, tone: "slate", detail: "Pending approvals for requests" },
+  { key: "changeTasks", label: "Change tasks", icon: Wrench, tone: "slate", detail: "Implementation tasks tied to changes" },
+  { key: "problems", label: "Active problems", icon: Wrench, tone: "slate", detail: "Problem records under investigation" }
 ];
 
 const CMDB_METRICS = [
@@ -315,7 +316,17 @@ function DomainHeader({ icon: Icon, eyebrow, title, subtitle }) {
 
 function OverviewMetric({ metric, value }) {
   const Icon = metric.icon;
-  return <EnhancedMetricCard metric={value} icon={Icon} />;
+  return (
+    <EnhancedMetricCard
+      metric={{
+        ...value,
+        label: metric.label,
+        tone: metric.tone,
+        detail: metric.detail
+      }}
+      icon={Icon}
+    />
+  );
 }
 
 function metricValue(metric) {

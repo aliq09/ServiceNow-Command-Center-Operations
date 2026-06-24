@@ -27,12 +27,15 @@ export function HeroHeader({
   };
 
   const connectionInfo = getConnectionStatus();
-  const latencyLabel = connection?.latency ? `${Math.round(connection.latency)}ms` : "—";
-  const syncTime = refreshedAt ? new Date(refreshedAt).toLocaleTimeString() : "—";
+  const latencyLabel = connection?.latency ? `${Math.round(connection.latency)}ms` : "?";
+  const syncTime = refreshedAt ? new Date(refreshedAt).toLocaleTimeString() : "?";
+  const instanceLabel = connection?.instanceName || instances.find((item) => item.id === instanceId)?.name || "Instance";
+  const environmentLabel = connection?.environment || "Unknown environment";
+  const sessionLabel = connection?.credentialSource || "session";
+  const hostLabel = connection?.host || "Host unavailable";
 
   return (
     <div className="snHeroHeader">
-      {/* Left: Title & Branding */}
       <div className="snHeroLeft">
         <div className="snHeroTitle">
           <h1>ServiceNow Operations Console</h1>
@@ -40,7 +43,6 @@ export function HeroHeader({
         </div>
       </div>
 
-      {/* Center: Connection Status (Prominent) */}
       <div className="snHeroCenter">
         <div className={`snConnectionBadge status-${connectionInfo.color}`}>
           <span className={`snConnectionDot snConnectionDot-${connectionInfo.status}`}>
@@ -52,15 +54,19 @@ export function HeroHeader({
           <div className="snConnectionInfo">
             <strong>{connectionInfo.label}</strong>
             <small>Latency: {latencyLabel}</small>
+            <small>{instanceLabel} ? {environmentLabel}</small>
           </div>
           <div className="snSyncStatus">
             <Clock size={14} />
             <span>{syncTime}</span>
           </div>
         </div>
+        <div className="snConnectionMeta">
+          <span>{hostLabel}</span>
+          <small>{sessionLabel}</small>
+        </div>
       </div>
 
-      {/* Right: Controls */}
       <div className="snHeroRight">
         <label className="snInstancePickerHero">
           <span>Instance</span>

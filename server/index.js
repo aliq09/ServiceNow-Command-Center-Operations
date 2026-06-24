@@ -25,7 +25,7 @@ const xaiAgentModel = process.env.XAI_AGENT_MODEL || "grok-4.20-0309-non-reasoni
 const geminiMeasurementModel = process.env.GEMINI_MEASUREMENT_MODEL || "gemini-2.5-flash";
 const geminiImageModel = process.env.GEMINI_IMAGE_MODEL || "imagen-3.0-generate-002";
 const geminiEditModel = process.env.GEMINI_EDIT_MODEL || "gemini-2.5-flash-image";
-const geminiVideoModel = process.env.GEMINI_VIDEO_MODEL || "veo-3.1-generate-preview";
+const geminiVideoModel = process.env.GEMINI_VIDEO_MODEL || "veo-3.1-fast-generate-preview";
 const orchestrationModel = process.env.OPENAI_ORCHESTRATION_MODEL || "gpt-5.2";
 const minimalStylingMaxAttempts = 2;
 const minimalStylingCostEstimate = 0.02;
@@ -191,7 +191,7 @@ const serviceNowRecordTypes = {
     ]
   },
   assets: {
-    label: "Assets",
+    label: "Assets (alm_asset)",
     singular: "Asset",
     table: "alm_asset",
     baseQuery: "",
@@ -207,7 +207,7 @@ const serviceNowRecordTypes = {
     ]
   },
   hardware_assets: {
-    label: "Hardware assets",
+    label: "Hardware assets (alm_hardware)",
     singular: "Hardware asset",
     table: "alm_hardware",
     baseQuery: "",
@@ -2366,9 +2366,9 @@ You are the OpenAI orchestration brain for a fashion AI workspace. You do not di
 Your job is to understand the user's natural-language intent, inspect available image metadata, refine prompts, and route the request to the best execution tool.
 
 Available execution providers and tools:
-- OpenAI image generation: best for general image creation, prompt-driven visuals, and OpenAI-native output.
-- OpenAI measurement analysis: use when the user asks for measurements, fit analysis, UK sizing, or body/garment estimate.
-- OpenAI video generation: use for Sora-style text-to-video work when OpenAI is selected or when a highly controlled video job is requested.
+- Gemini image generation: use as the default lower-cost path for general image creation and prompt-driven visuals.
+- Gemini measurement analysis: use when the user asks for measurements, fit analysis, UK sizing, or body/garment estimate unless the user explicitly asks for OpenAI or Grok.
+- Gemini video generation: use as the default lower-cost path for image-to-video or text-to-video when the user has not explicitly chosen another provider.
 - Grok image analysis: use as an alternative vision analyzer when the user asks for Grok or comparison.
 - Grok image generation/editing: use for Grok Imagine generation, image edits, restyling, and image-to-image workflows.
 - Grok video generation: use for Grok Imagine image-to-video and fast creative video exploration.
@@ -2394,10 +2394,11 @@ Schema:
 }
 
 Routing rules:
-- If the user asks to edit/restyle/enhance an existing uploaded image, choose xai.image.edit unless they explicitly ask for OpenAI.
-- If the user asks for measurements or UK sizes, choose openai.measurement by default.
-- If the user asks to create a new image from text, choose openai.image.generate by default unless they ask for Grok.
-- If the user asks image-to-video or animate this image, choose xai.video.generate if an image is attached; otherwise choose openai.video.generate for text-to-video.
+- If the user asks to edit/restyle/enhance an existing uploaded image, choose gemini.image.edit by default unless they explicitly ask for Grok or OpenAI.
+- If the user asks for measurements or UK sizes, choose gemini.measurement by default unless they explicitly ask for Grok or OpenAI.
+- If the user asks to create a new image from text, choose gemini.image.generate by default unless they ask for Grok or OpenAI.
+- If the user asks image-to-video or animate this image, choose gemini.video.generate by default; use xai.video.generate only when the user explicitly asks for Grok and openai.video.generate for manual OpenAI override.
+- If the UI/user selected OpenAI or Grok, keep that explicit provider choice.
 - If the UI/user selected Gemini, keep the route on Gemini: gemini.image.generate for images, gemini.image.edit for edits, gemini.video.generate for image-to-video, gemini.measurement for vision analysis.
 - If the request is vague, choose internal.prompt and execute false.
 - Preserve subject identity, face, body proportions, and garment details only as a prompt instruction; never claim exact biometric accuracy.
@@ -2406,7 +2407,7 @@ Routing rules:
 app.post("/api/measure-image", upload.single("reference"), async (req, res) => {
   const openai = getOpenAI();
   const xai = getXAI();
-  const { provider = "xai", model } = req.body || {};
+  const { provider = "gemini", model } = req.body || {};
 
   if (!req.file) {
     res.status(400).json({ error: "A reference image is required." });
@@ -3766,7 +3767,7 @@ function cryptoRandomId(prefix) {
   return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-function routeForAction(action, provider = "openai") {
+function routeForAction(action, provider = "gemini") {
   if (action === "analyze_image") return provider === "gemini" ? "gemini.measurement" : provider === "xai" ? "xai.measurement" : "openai.measurement";
   if (action === "generate_image") return provider === "gemini" ? "gemini.image.generate" : provider === "xai" ? "xai.image.generate" : "openai.image.generate";
   if (action === "edit_image") return provider === "gemini" ? "gemini.image.edit" : "xai.image.edit";
@@ -3805,7 +3806,7 @@ function modelForRoute(route) {
 
 app.post("/api/generate-image", upload.array("references", 8), async (req, res) => {
   const openai = getOpenAI();
-  const { prompt, quality = "auto", size = "auto", provider = "openai", model } = req.body || {};
+  const { prompt, quality = "auto", size = "auto", provider = "gemini", model } = req.body || {};
 
   if (!prompt) {
     res.status(400).json({ error: "Prompt is required." });
@@ -3881,7 +3882,7 @@ app.post("/api/generate-image", upload.array("references", 8), async (req, res) 
 });
 
 app.post("/api/edit-image", upload.single("reference"), async (req, res) => {
-  const { prompt, provider = "xai", model, quality = "high", size = "auto" } = req.body || {};
+  const { prompt, provider = "gemini", model, quality = "high", size = "auto" } = req.body || {};
   const resolvedModel = model || (provider === "gemini" ? geminiEditModel : xaiImageModel);
 
   try {
@@ -4054,7 +4055,7 @@ app.post("/api/grok-agent-chat", upload.single("reference"), async (req, res) =>
 
 app.post("/api/generate-video", upload.single("reference"), async (req, res) => {
   const openai = getOpenAI();
-  const { prompt, quality = "standard", size = "1280x720", seconds = "8", provider = "openai", model } = req.body || {};
+  const { prompt, quality = "standard", size = "1280x720", seconds = "8", provider = "gemini", model } = req.body || {};
   const resolvedModel = model || (provider === "gemini" ? geminiVideoModel : provider === "xai" ? xaiVideoModel : quality === "pro" ? "sora-2-pro" : "sora-2");
 
   if (!prompt) {

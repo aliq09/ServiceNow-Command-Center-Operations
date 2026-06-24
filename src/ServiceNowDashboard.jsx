@@ -4,7 +4,6 @@ import {
 } from "lucide-react";
 import { useToast, ToastContainer } from "./useToast";
 import { DashboardLayout } from "./DashboardLayout";
-import { HeroHeader } from "./HeroHeader";
 import { WorkInstanceDialog } from "./WorkInstanceDialog";
 import { ServiceNowOverview } from "./ServiceNowOverview";
 import { ServiceNowDiscovery } from "./ServiceNowDiscovery";
@@ -33,6 +32,7 @@ export function ServiceNowDashboard() {
   const [instanceId, setInstanceId] = useState(() => localStorage.getItem("servicenowInstance") || "pdi");
   const [workDialogOpen, setWorkDialogOpen] = useState(false);
   const [refreshToken, setRefreshToken] = useState(0);
+  const [activeModule, setActiveModule] = useState("overview");
   const [sectionState, setSectionState] = useState({
     overview: { loading: false, startedAt: null, tick: 0 },
     discovery: { loading: false, startedAt: null, tick: 0 },
@@ -188,36 +188,31 @@ export function ServiceNowDashboard() {
     setInstanceId("work");
   };
 
+  const navigateModule = (moduleId) => {
+    setActiveModule(moduleId);
+    const target = document.getElementById(moduleId);
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <section className="snDashboard" aria-label="ServiceNow operations dashboard">
       <ToastContainer toasts={toasts} onRemove={removeToast} />
-      <DashboardLayout currentModule="overview">
-        {/* Enhanced Hero Header */}
-        <HeroHeader
-          instanceId={instanceId}
-          instances={instances}
-          onSelectInstance={selectInstance}
-          onRefresh={() => setRefreshToken((value) => value + 1)}
-          loading={loading}
-          connection={connection}
-          overview={overview}
-          refreshedAt={overview?.generatedAt}
-        />
-        
-        {/* Main Overview Content */}
-        <ServiceNowOverview
-          overview={overview}
-          discovery={discovery}
-          sam={sam}
-          csdm={csdm}
-          instances={instances}
-          instanceId={instanceId}
-          onSelectInstance={selectInstance}
-          onRefresh={() => setRefreshToken((value) => value + 1)}
-          onRefreshOverview={refreshOverview}
-          refreshState={sectionState.overview}
-          loading={loading}
-        />
+      <DashboardLayout currentModule={activeModule} onSelectModule={navigateModule}>
+        <div id="overview-content">
+          <ServiceNowOverview
+            overview={overview}
+            discovery={discovery}
+            sam={sam}
+            csdm={csdm}
+            instances={instances}
+            instanceId={instanceId}
+            onSelectInstance={selectInstance}
+            onRefresh={() => setRefreshToken((value) => value + 1)}
+            onRefreshOverview={refreshOverview}
+            refreshState={sectionState.overview}
+            loading={loading}
+          />
+        </div>
 
       {error && (
         <div className="snError" role="alert">
@@ -227,38 +222,54 @@ export function ServiceNowDashboard() {
         </div>
       )}
 
-      <ServiceNowDiscovery
-        discovery={discovery}
-        loading={loading}
-        error={discoveryError}
-        onRefresh={refreshDiscovery}
-        refreshState={sectionState.discovery}
-      />
-      <ServiceNowCsdm
-        csdm={csdm}
-        loading={loading}
-        error={csdmError}
-        onRefresh={refreshCsdm}
-        refreshState={sectionState.csdm}
-      />
-      <ServiceNowGovernance instanceId={instanceId} />
-      <ServiceNowDataMovements instances={instances} instanceId={instanceId} />
-      <ServiceNowSam
-        sam={sam}
-        loading={loading}
-        error={samError}
-        onRefresh={refreshSam}
-        refreshState={sectionState.sam}
-      />
-      <ServiceNowComputerIntelligence
-        data={computerIntelligence}
-        loading={loading}
-        error={computerError}
-        onRefresh={refreshComputer}
-        refreshState={sectionState.computer}
-      />
-      <UnifiedRecordExplorer instanceId={instanceId} />
-      <ServiceNowDeveloperStudio instanceId={instanceId} />
+      <div id="discovery">
+        <ServiceNowDiscovery
+          discovery={discovery}
+          loading={loading}
+          error={discoveryError}
+          onRefresh={refreshDiscovery}
+          refreshState={sectionState.discovery}
+        />
+      </div>
+      <div id="csdm">
+        <ServiceNowCsdm
+          csdm={csdm}
+          loading={loading}
+          error={csdmError}
+          onRefresh={refreshCsdm}
+          refreshState={sectionState.csdm}
+        />
+      </div>
+      <div id="governance">
+        <ServiceNowGovernance instanceId={instanceId} />
+      </div>
+      <div id="dataMovements">
+        <ServiceNowDataMovements instances={instances} instanceId={instanceId} />
+      </div>
+      <div id="sam">
+        <ServiceNowSam
+          sam={sam}
+          loading={loading}
+          error={samError}
+          onRefresh={refreshSam}
+          refreshState={sectionState.sam}
+        />
+      </div>
+      <div id="computerIntelligence">
+        <ServiceNowComputerIntelligence
+          data={computerIntelligence}
+          loading={loading}
+          error={computerError}
+          onRefresh={refreshComputer}
+          refreshState={sectionState.computer}
+        />
+      </div>
+      <div id="explorer">
+        <UnifiedRecordExplorer instanceId={instanceId} />
+      </div>
+      <div id="developerStudio">
+        <ServiceNowDeveloperStudio instanceId={instanceId} />
+      </div>
       
       <WorkInstanceDialog
         open={workDialogOpen}

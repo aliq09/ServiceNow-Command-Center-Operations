@@ -13,7 +13,7 @@ import { DataStateIndicator, formatMetricValue, metricAvailabilityLabel } from "
 /**
  * EnhancedMetricCard - Shows metric value with trend indicator and clear data state
  * Props:
- *   - metric: { label, icon, tone, value, trend?, reason? }
+ *   - metric: { label, icon, tone, value, trend?, reason?, detail? }
  *   - showDataState: Boolean (default true) - show unavailable/loading state
  */
 export function EnhancedMetricCard({ metric, icon: Icon, showDataState = true }) {
@@ -48,6 +48,8 @@ export function EnhancedMetricCard({ metric, icon: Icon, showDataState = true })
         )}
         <small className="snMetricLabel">{metric.label}</small>
       </div>
+
+      {metric.detail && <p className="snMetricDetail">{metric.detail}</p>}
 
       {/* Main Value with Trend */}
       <div className="snMetricValue">

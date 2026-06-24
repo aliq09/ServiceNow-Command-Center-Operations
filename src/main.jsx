@@ -76,9 +76,9 @@ const videoSizes = [
 ];
 
 const providerOptions = [
+  { value: "gemini", label: "Google Gemini" },
   { value: "openai", label: "OpenAI" },
-  { value: "xai", label: "Grok / xAI" },
-  { value: "gemini", label: "Google Gemini" }
+  { value: "xai", label: "Grok / xAI" }
 ];
 
 const measurementModelOptions = {
@@ -107,6 +107,7 @@ const videoModelOptions = {
   ],
   xai: [{ value: "grok-imagine-video", label: "Grok Imagine" }],
   gemini: [
+    { value: "veo-3.1-fast-generate-preview", label: "Veo 3.1 Fast" },
     { value: "veo-3.1-generate-preview", label: "Veo 3.1" },
     { value: "gemini-omni-flash", label: "Omni Flash (API pending)" }
   ]
@@ -159,9 +160,10 @@ const providerFilterOptions = [
 
 function previewActionCost(type, model = "") {
   if (String(model || "").includes("omni")) return 0;
-  if (String(model || "").startsWith("veo")) return 1.6;
-  if (String(model || "").startsWith("imagen")) return 0.04;
-  if (String(model || "").includes("flash-image")) return 0.039;
+  if (String(model || "").includes("veo-3.1-fast")) return 0.25;
+  if (String(model || "").startsWith("veo")) return 0.5;
+  if (String(model || "").startsWith("imagen")) return 0.03;
+  if (String(model || "").includes("flash-image")) return 0.03;
   if (type === "video") return 0.25;
   if (type === "measurement") return 0.0035;
   if (type === "agent") return 0.0035;
@@ -177,24 +179,24 @@ function App() {
   const [files, setFiles] = useState([]);
   const [activeFile, setActiveFile] = useState(null);
   const [editFile, setEditFile] = useState(null);
-  const [measurementProvider, setMeasurementProvider] = useState("xai");
-  const [measurementModel, setMeasurementModel] = useState("grok-4.20-0309-reasoning");
+  const [measurementProvider, setMeasurementProvider] = useState("gemini");
+  const [measurementModel, setMeasurementModel] = useState("gemini-2.5-flash");
   const [imageQuality, setImageQuality] = useState("auto");
   const [imageSize, setImageSize] = useState("auto");
-  const [imageProvider, setImageProvider] = useState("openai");
-  const [imageModel, setImageModel] = useState("gpt-image-2");
+  const [imageProvider, setImageProvider] = useState("gemini");
+  const [imageModel, setImageModel] = useState("imagen-3.0-generate-002");
   const [videoQuality, setVideoQuality] = useState("standard");
   const [videoSize, setVideoSize] = useState("1280x720");
-  const [videoProvider, setVideoProvider] = useState("openai");
-  const [videoModel, setVideoModel] = useState("sora-2");
-  const [editProvider, setEditProvider] = useState("xai");
-  const [editModel, setEditModel] = useState("grok-imagine-image");
+  const [videoProvider, setVideoProvider] = useState("gemini");
+  const [videoModel, setVideoModel] = useState("veo-3.1-fast-generate-preview");
+  const [editProvider, setEditProvider] = useState("gemini");
+  const [editModel, setEditModel] = useState("gemini-2.5-flash-image");
   const [editQuality, setEditQuality] = useState("high");
   const [shoppingGuide, setShoppingGuide] = useState(null);
   const [fitProfile, setFitProfile] = useState(buildEmptyFitProfile());
   const [isMeasuring, setIsMeasuring] = useState(false);
   const [workflowState, setWorkflowState] = useState("idle");
-  const [lastMeasurementProvider, setLastMeasurementProvider] = useState("openai");
+  const [lastMeasurementProvider, setLastMeasurementProvider] = useState("gemini");
   const [notice, setNotice] = useState({ tone: "neutral", text: "Upload model photos to begin a measurement-ready session." });
   const [usageLog, setUsageLog] = useState([]);
   const [mediaResults, setMediaResults] = useState([]);
@@ -1652,8 +1654,8 @@ function App() {
 
         <div className="sidebarFooter">
           <span>Models</span>
-          <strong>{measurementProvider === "xai" ? "Grok analysis" : "OpenAI analysis"}</strong>
-          <small>{imageProvider === "xai" ? "Grok Image" : "GPT-image-2"} Â· {videoProvider === "xai" ? "Grok video" : "Sora video"}</small>
+          <strong>{measurementProvider === "gemini" ? "Gemini analysis" : measurementProvider === "xai" ? "Grok analysis" : "OpenAI analysis"}</strong>
+          <small>{imageProvider === "gemini" ? "Imagen 3" : imageProvider === "xai" ? "Grok Image" : "GPT-image-2"} Â· {videoProvider === "gemini" ? "Veo 3.1" : videoProvider === "xai" ? "Grok video" : "Sora video"}</small>
         </div>
       </aside>
 
@@ -1876,8 +1878,8 @@ function App() {
 
             <div className="measurementProviderNote">
               <span>Measurement cost guide</span>
-              <strong>{measurementProvider === "xai" ? "Grok is currently the lower-cost measurement path in your logged usage." : "OpenAI is selected first for this measurement scan."}</strong>
-              <small>{measurementProvider === "xai" ? "OpenAI scan is available below for comparison; Grok AI remains available for second-opinion rescans." : "Use Grok AI below for a second-opinion rescan when needed."}</small>
+              <strong>{measurementProvider === "gemini" ? "Gemini is currently the lower-cost measurement path for this workspace." : measurementProvider === "xai" ? "Grok is currently the lower-cost measurement path in your logged usage." : "OpenAI is selected first for this measurement scan."}</strong>
+              <small>{measurementProvider === "gemini" ? "OpenAI and Grok remain available for comparison and second-opinion rescans." : measurementProvider === "xai" ? "OpenAI scan is available below for comparison; Grok AI remains available for second-opinion rescans." : "Use Grok AI below for a second-opinion rescan when needed."}</small>
             </div>
 
             <div className="fitSummary">
@@ -4022,33 +4024,33 @@ function buildModelRecommendation(mode, context = {}) {
       providerLabel: "Google Gemini",
       model: videoModelOptions.gemini[0].value,
       modelLabel: videoModelOptions.gemini[0].label,
-      reason: "Best fit for image-to-video and async creative video jobs. You can still override to Sora or Grok."
+      reason: "Best fit for cost-conscious image-to-video and async creative video jobs. You can still override to Sora or Grok."
     };
   }
   if (mode === "edit") {
     return {
-      provider: "xai",
-      providerLabel: "Grok / xAI",
-      model: editModelOptions.xai[1].value,
-      modelLabel: editModelOptions.xai[1].label,
-      reason: "Best current path for image editing and restyling while keeping a clear source image context."
+      provider: "gemini",
+      providerLabel: "Google Gemini",
+      model: editModelOptions.gemini[0].value,
+      modelLabel: editModelOptions.gemini[0].label,
+      reason: "Best lower-cost path for image editing and restyling while keeping a clear source image context."
     };
   }
   if (mode === "measure") {
     return {
-      provider: "xai",
-      providerLabel: "Grok / xAI",
-      model: measurementModelOptions.xai[0].value,
-      modelLabel: measurementModelOptions.xai[0].label,
-      reason: "Reasoning vision is best for body-measurement analysis and confidence notes."
+      provider: "gemini",
+      providerLabel: "Google Gemini",
+      model: measurementModelOptions.gemini[0].value,
+      modelLabel: measurementModelOptions.gemini[0].label,
+      reason: "Best lower-cost vision path for body-measurement analysis and confidence notes."
     };
   }
   return {
-    provider: "openai",
-    providerLabel: "OpenAI",
-    model: imageModelOptions.openai[0].value,
-    modelLabel: imageModelOptions.openai[0].label,
-    reason: "Strong default for prompt-to-image generation and polished fashion editorial compositions."
+    provider: "gemini",
+    providerLabel: "Google Gemini",
+    model: imageModelOptions.gemini[0].value,
+    modelLabel: imageModelOptions.gemini[0].label,
+    reason: "Strong lower-cost default for prompt-to-image generation and polished fashion editorial compositions."
   };
 }
 

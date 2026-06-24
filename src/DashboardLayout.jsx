@@ -21,13 +21,13 @@ const MODULE_NAVIGATION = [
   { id: "sam", label: "SAM Pro", icon: BarChart3, description: "Software licensing" },
   { id: "csdm", label: "CSDM", icon: Database, description: "Config management" },
   { id: "governance", label: "Governance", icon: Shield, description: "Controls & compliance" },
-  { id: "movements", label: "Data Movements", icon: GitBranch, description: "Change tracking" },
-  { id: "intelligence", label: "Intelligence", icon: Zap, description: "AI insights" },
+  { id: "dataMovements", label: "Data Movements", icon: GitBranch, description: "Change tracking" },
+  { id: "computerIntelligence", label: "Intelligence", icon: Zap, description: "AI insights" },
   { id: "explorer", label: "Record Explorer", icon: Eye, description: "Data browser" },
   { id: "studio", label: "Dev Studio", icon: Code2, description: "Development" }
 ];
 
-export function DashboardLayout({ children, currentModule = "overview" }) {
+export function DashboardLayout({ children, currentModule = "overview", onSelectModule }) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const toggleSidebar = () => {
@@ -60,12 +60,13 @@ export function DashboardLayout({ children, currentModule = "overview" }) {
             const Icon = module.icon;
             const isActive = currentModule === module.id;
             return (
-              <a
+              <button
                 key={module.id}
-                href={`#${module.id}`}
+                type="button"
                 className={`snModuleNavItem ${isActive ? "is-active" : ""}`}
                 title={module.label}
                 aria-current={isActive ? "page" : undefined}
+                onClick={() => onSelectModule?.(module.id)}
               >
                 <span className="snModuleIcon">
                   <Icon size={18} />
@@ -76,7 +77,7 @@ export function DashboardLayout({ children, currentModule = "overview" }) {
                     <small>{module.description}</small>
                   </div>
                 )}
-              </a>
+              </button>
             );
           })}
         </nav>

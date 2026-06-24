@@ -17,8 +17,7 @@ const RECORD_TYPES = [
   ["cis", "All CIs"],
   ["computers", "Computers"],
   ["servers", "Servers"],
-  ["assets", "Assets"],
-  ["hardware_assets", "Hardware assets"]
+  ["assets", "Assets (alm_asset)"]
 ];
 const PAGE_SIZES = [10, 20, 50, 100];
 
@@ -27,7 +26,7 @@ export function UnifiedRecordExplorer({ instanceId }) {
   const [query, setQuery] = useState("");
   const [committedQuery, setCommittedQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
+  const [pageSize, setPageSize] = useState(10);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");

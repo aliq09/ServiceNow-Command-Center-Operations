@@ -19340,18 +19340,30 @@ body {
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
-  color: #999;
+  color: #465564;
   letter-spacing: 0.5px;
 }
 
 .snInstancePickerHero select {
   padding: 8px 32px 8px 12px;
-  border: 1px solid #d0d0d0;
-  border-radius: 6px;
+  border: 1px solid #b8c4cf;
+  border-radius: 8px;
   font-size: 13px;
-  background: white;
+  background: #f8fbfd;
+  color: #172033;
   cursor: pointer;
   appearance: none;
+  min-width: 210px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04) inset;
+}
+
+.snInstancePickerHero select:hover {
+  border-color: #90a4b8;
+}
+
+.snInstancePickerHero select option {
+  color: #172033;
+  background: #fff;
 }
 
 .snHeroRefreshBtn {
@@ -19428,6 +19440,13 @@ body {
   text-transform: uppercase;
   color: #999;
   letter-spacing: 0.3px;
+}
+
+.snMetricDetail {
+  margin: -2px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: #667085;
 }
 
 .snMetricValue {
