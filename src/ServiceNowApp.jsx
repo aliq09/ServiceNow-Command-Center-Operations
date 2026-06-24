@@ -1,3 +1,4 @@
+import React from "react";
 import { ShieldCheck, Layers3 } from "lucide-react";
 import { ServiceNowDashboard } from "./ServiceNowDashboard";
 
@@ -18,8 +19,37 @@ export function ServiceNowApp() {
         </div>
       </header>
       <div className="snStandaloneContent">
-        <ServiceNowDashboard />
+        <ServiceNowErrorBoundary>
+          <ServiceNowDashboard />
+        </ServiceNowErrorBoundary>
       </div>
     </main>
   );
+}
+
+class ServiceNowErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="snError snErrorFatal" role="alert">
+          <ShieldCheck size={18} />
+          <div>
+            <strong>ServiceNow app failed to render</strong>
+            <span>{this.state.error?.message || "A client-side error stopped the dashboard from loading."}</span>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
 }
