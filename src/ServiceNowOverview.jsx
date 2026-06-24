@@ -21,6 +21,8 @@ import {
   TriangleAlert,
   Wrench
 } from "lucide-react";
+import { ConnectionStatus } from "./ConnectionStatus";
+import { DataStateIndicator, formatMetricValue, metricAvailabilityLabel } from "./DataStateHelper";
 
 const ITSM_METRICS = [
   { key: "incidents", label: "Active incidents", icon: Siren, tone: "red" },
@@ -137,6 +139,7 @@ export function ServiceNowOverview({
         </div>
 
         <div className="snConnectionControls">
+          <ConnectionStatus connection={connection} refreshedAt={overview?.generatedAt} />
           <label className="snInstancePicker snInstancePickerHero">
             <span>Switch instance</span>
             <select value={instanceId} onChange={(event) => onSelectInstance(event.target.value)} aria-label="ServiceNow instance">
@@ -325,12 +328,11 @@ function OverviewMetric({ metric, value }) {
 }
 
 function metricValue(metric) {
-  if (!metric?.available) return "â";
-  return Number(metric.value || 0).toLocaleString("en-GB");
+  return formatMetricValue(metric, false);
 }
 
 function metricAvailability(metric) {
-  return metric?.available ? "Live" : metric?.reason || "Unavailable";
+  return metricAvailabilityLabel(metric);
 }
 
 function resolveCmdbMetric(cmdb, key) {
@@ -394,18 +396,6 @@ function StripCard({ tone, label, value, detail, percent = false, compact = fals
       <small>{detail}</small>
     </article>
   );
-}
-
-function formatMetricValue(metric, percent = false) {
-  if (metric === null || metric === undefined) return "â";
-  if (typeof metric === "object") {
-    if (metric.available === false) return "â";
-    const raw = metric.value;
-    if (raw === null || raw === undefined) return "â";
-    if (percent) return `${Number(raw).toLocaleString("en-GB")}%`;
-    return Number(raw).toLocaleString("en-GB");
-  }
-  return percent ? `${Number(metric).toLocaleString("en-GB")}%` : Number(metric).toLocaleString("en-GB");
 }
 
 function rateLabel(metric) {
